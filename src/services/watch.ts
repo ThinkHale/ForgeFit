@@ -1,0 +1,108 @@
+import WatchConnectivity from 'react-native-watch-connectivity';
+import { WatchMessage, WatchWorkoutUpdate } from '../types';
+
+type WorkoutUpdateHandler = (update: WatchWorkoutUpdate) => void;
+type MessageHandler = (message: WatchMessage) => void;
+
+class WatchService {
+  private updateHandlers: WorkoutUpdateHandler[] = [];
+  private messageHandlers: MessageHandler[] = [];
+  private isReachable = false;
+
+  async initialize(): Promise<void> {
+    try {
+      const supported = await WatchConnectivity.isSupported();
+      if (!supported) return;
+
+      WatchConnectivity.watchEvents.on('reachabilityChanged', (reachable: boolean) => {
+        this.isReachable = reachable;
+      });
+
+      WatchConnectivity.watchEvents.on('message', (message: Record<string, unknown>) => {
+        const watchMessage = message as unknown as WatchMessage;
+        if (watchMessage.type === 'WORKOUT_UPDATE' && watchMessage.payload) {
+          const update = watchMessage.payload as unknown as WatchWorkoutUpdate;
+          this.updateHandlers.forEach(h => h(update));
+        }
+        this.messageHandlers.forEach(h => h(watchMessage));
+      });
+
+      const reachable = await WatchConnectivity.getReachability();
+      this.isReachable = reachable;
+    } catch (e) {
+      console.warn('[Watch] Init failed:', e);
+    }
+  }
+
+  onWorkoutUpdate(handler: WorkoutUpdateHandler): () => void {
+    this.updateHandlers.push(handler);
+    return () => {
+      this.updateHandlers = this.updateHandlers.filter(h => h !== handler);
+    };
+  }
+
+  onMessage(handler: MessageHandler): () => void {
+    this.messageHandlers.push(handler);
+    return () => {
+      this.messageHandlers = this.messageHandlers.filter(h => h !== handler);
+    };
+  }
+
+  async sendWorkoutStart(params: {
+    workoutName: string;
+    exercises: Array<{ name: string; sets: number; reps: number }>;
+    estimatedMinutes: number;
+  }): Promise<void> {
+    if (!this.isReachable) return;
+    const msg: WatchMessage = {
+      type: 'START_WORKOUT',
+      payload: params,
+      timestamp: new Date().toISOString(),
+    };
+    await WatchConnectivity.sendMessage(msg as unknown as Record<string, unknown>);
+  }
+
+  async sendNextExercise(exercise: {
+    name: string;
+    sets: number;
+    reps: number;
+    weight?: number;
+    restSeconds: number;
+  }): Promise<void> {
+    if (!this.isReachable) return;
+    const msg: WatchMessage = {
+      type: 'NEXT_EXERCISE',
+      payload: exercise,
+      timestamp: new Date().toISOString(),
+    };
+    await WatchConnectivity.sendMessage(msg as unknown as Record<string, unknown>);
+  }
+
+  async sendWorkoutEnd(summary: {
+    durationMinutes: number;
+    caloriesBurned: number;
+    completedSets: number;
+  }): Promise<void> {
+    if (!this.isReachable) return;
+    const msg: WatchMessage = {
+      type: 'END_WORKOUT',
+      payload: summary,
+      timestamp: new Date().toISOString(),
+    };
+    await WatchConnectivity.sendMessage(msg as unknown as Record<string, unknown>);
+  }
+
+  async updateApplicationContext(context: Record<string, unknown>): Promise<void> {
+    try {
+      await WatchConnectivity.updateApplicationContext(context);
+    } catch (e) {
+      console.warn('[Watch] Context update failed:', e);
+    }
+  }
+
+  get reachable(): boolean {
+    return this.isReachable;
+  }
+}
+
+export const watchService = new WatchService();

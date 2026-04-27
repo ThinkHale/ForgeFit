@@ -1,0 +1,184 @@
+import AppleHealthKit, {
+  HealthKitPermissions,
+  HealthValue,
+  HealthInputOptions,
+} from 'react-native-health';
+import { HealthSnapshot } from '../types';
+
+const PERMISSIONS: HealthKitPermissions = {
+  permissions: {
+    read: [
+      AppleHealthKit.Constants.Permissions.Steps,
+      AppleHealthKit.Constants.Permissions.ActiveEnergyBurned,
+      AppleHealthKit.Constants.Permissions.BasalEnergyBurned,
+      AppleHealthKit.Constants.Permissions.HeartRate,
+      AppleHealthKit.Constants.Permissions.RestingHeartRate,
+      AppleHealthKit.Constants.Permissions.HeartRateVariability,
+      AppleHealthKit.Constants.Permissions.SleepAnalysis,
+      AppleHealthKit.Constants.Permissions.Weight,
+      AppleHealthKit.Constants.Permissions.BodyFatPercentage,
+      AppleHealthKit.Constants.Permissions.VO2Max,
+      AppleHealthKit.Constants.Permissions.Workout,
+      AppleHealthKit.Constants.Permissions.ExerciseTime,
+      AppleHealthKit.Constants.Permissions.StandTime,
+      AppleHealthKit.Constants.Permissions.DistanceWalkingRunning,
+      AppleHealthKit.Constants.Permissions.DietaryEnergyConsumed,
+      AppleHealthKit.Constants.Permissions.DietaryProtein,
+      AppleHealthKit.Constants.Permissions.DietaryCarbohydrates,
+      AppleHealthKit.Constants.Permissions.DietaryFatTotal,
+    ],
+    write: [
+      AppleHealthKit.Constants.Permissions.Steps,
+      AppleHealthKit.Constants.Permissions.ActiveEnergyBurned,
+      AppleHealthKit.Constants.Permissions.Workout,
+      AppleHealthKit.Constants.Permissions.Weight,
+      AppleHealthKit.Constants.Permissions.DietaryEnergyConsumed,
+      AppleHealthKit.Constants.Permissions.DietaryProtein,
+      AppleHealthKit.Constants.Permissions.DietaryCarbohydrates,
+      AppleHealthKit.Constants.Permissions.DietaryFatTotal,
+    ],
+  },
+};
+
+class HealthService {
+  private initialized = false;
+
+  async initialize(): Promise<boolean> {
+    return new Promise((resolve) => {
+      AppleHealthKit.initHealthKit(PERMISSIONS, (error: string) => {
+        if (error) {
+          console.warn('[HealthKit] Init failed:', error);
+          resolve(false);
+        } else {
+          this.initialized = true;
+          resolve(true);
+        }
+      });
+    });
+  }
+
+  async getTodaySnapshot(): Promise<Partial<HealthSnapshot>> {
+    if (!this.initialized) return {};
+    const today = new Date();
+    const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
+    const now = new Date().toISOString();
+
+    const [steps, activeCalories, heartRate, restingHR] = await Promise.allSettled([
+      this.getSteps(startOfDay, now),
+      this.getActiveCalories(startOfDay, now),
+      this.getLatestHeartRate(),
+      this.getRestingHeartRate(),
+    ]);
+
+    return {
+      date: new Date().toISOString().split('T')[0],
+      steps: steps.status === 'fulfilled' ? steps.value : 0,
+      activeCalories: activeCalories.status === 'fulfilled' ? activeCalories.value : 0,
+      heartRateAvg: heartRate.status === 'fulfilled' ? heartRate.value : 0,
+      heartRateResting: restingHR.status === 'fulfilled' ? restingHR.value : 0,
+    };
+  }
+
+  private getSteps(startDate: string, endDate: string): Promise<number> {
+    return new Promise((resolve) => {
+      const opts: HealthInputOptions = { startDate, endDate };
+      AppleHealthKit.getStepCount(opts, (err, result) => {
+        resolve(err ? 0 : (result as HealthValue).value ?? 0);
+      });
+    });
+  }
+
+  private getActiveCalories(startDate: string, endDate: string): Promise<number> {
+    return new Promise((resolve) => {
+      const opts: HealthInputOptions = { startDate, endDate };
+      AppleHealthKit.getActiveEnergyBurned(opts, (err, results) => {
+        if (err || !Array.isArray(results)) { resolve(0); return; }
+        const total = results.reduce((sum, r) => sum + (r.value ?? 0), 0);
+        resolve(Math.round(total));
+      });
+    });
+  }
+
+  private getLatestHeartRate(): Promise<number> {
+    return new Promise((resolve) => {
+      const opts: HealthInputOptions = { limit: 1, ascending: false };
+      AppleHealthKit.getHeartRateSamples(opts, (err, results) => {
+        if (err || !Array.isArray(results) || !results.length) { resolve(0); return; }
+        resolve(Math.round(results[0].value ?? 0));
+      });
+    });
+  }
+
+  private getRestingHeartRate(): Promise<number> {
+    return new Promise((resolve) => {
+      const opts: HealthInputOptions = { limit: 1, ascending: false };
+      AppleHealthKit.getRestingHeartRate(opts, (err, result) => {
+        resolve(err ? 0 : Math.round((result as HealthValue).value ?? 0));
+      });
+    });
+  }
+
+  async getLatestWeight(): Promise<number | null> {
+    return new Promise((resolve) => {
+      const opts: HealthInputOptions = { limit: 1, ascending: false, unit: 'pound' };
+      AppleHealthKit.getWeightSamples(opts, (err, results) => {
+        if (err || !Array.isArray(results) || !results.length) { resolve(null); return; }
+        resolve(results[0].value ?? null);
+      });
+    });
+  }
+
+  async getWeeklySteps(): Promise<Array<{ date: string; value: number }>> {
+    return new Promise((resolve) => {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 6);
+      const opts: HealthInputOptions = {
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        period: 60 * 24, // 24-hour buckets
+      };
+      AppleHealthKit.getDailyStepCountSamples(opts, (err, results) => {
+        if (err || !Array.isArray(results)) { resolve([]); return; }
+        resolve(results.map(r => ({ date: r.startDate, value: r.value ?? 0 })));
+      });
+    });
+  }
+
+  async logWorkout(params: {
+    type: string;
+    startDate: string;
+    endDate: string;
+    calories: number;
+  }): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const opts = {
+        type: 'TraditionalStrengthTraining',
+        startDate: params.startDate,
+        endDate: params.endDate,
+        energyBurned: params.calories,
+        energyBurnedUnit: 'calorie' as const,
+      };
+      AppleHealthKit.saveWorkout(opts, (err) => {
+        if (err) reject(err); else resolve();
+      });
+    });
+  }
+
+  async logNutrition(params: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    date?: string;
+  }): Promise<void> {
+    const date = params.date ?? new Date().toISOString();
+    await Promise.all([
+      new Promise<void>((resolve) => {
+        AppleHealthKit.saveFood({ foodName: 'Forge Log', calories: params.calories, date }, (err) => { resolve(); });
+      }),
+    ]);
+  }
+}
+
+export const healthService = new HealthService();
