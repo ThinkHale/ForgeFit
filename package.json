@@ -35,8 +35,7 @@
     "date-fns": "^4.1.0",
     "react-native-health": "^1.19.0",
     "@react-native-async-storage/async-storage": "1.23.1",
-    "react-native-watch-connectivity": "^1.0.0",
-    "victory-native": "^41.0.0"
+    "react-native-watch-connectivity": "^1.0.0"
   },
   "devDependencies": {
     "@babel/core": "^7.25.0",
