@@ -1,16 +1,30 @@
+# JS / Expo
 node_modules/
 .expo/
 dist/
 build/
+web-build/
+*.orig.*
+
+# Environment — never commit real secrets
+.env
+.env.local
+.env.production
+
+# Certificates / signing
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
-*.orig.*
-web-build/
-.env
-.env.local
-.env.production
-ios/
+
+# iOS — track native files, but not CocoaPods build artifacts
+# Run `cd ios && pod install` after cloning (setup.sh does this automatically)
+ios/Pods/
+ios/build/
+ios/DerivedData/
+*.xcuserstate
+*.xcscheme
+
+# Android — not in scope for this project
 android/
