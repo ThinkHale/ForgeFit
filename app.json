@@ -38,9 +38,9 @@
       ]
     ],
     "extra": {
-      "supabaseUrl": "YOUR_SUPABASE_URL",
-      "supabaseAnonKey": "YOUR_SUPABASE_ANON_KEY",
-      "anthropicApiKey": "YOUR_ANTHROPIC_API_KEY"
+      "supabaseUrl": "REMOVED_SECRET",
+      "supabaseAnonKey": "REMOVED_SECRET",
+      "anthropicApiKey": "REMOVED_SECRET"
     }
   }
 }
