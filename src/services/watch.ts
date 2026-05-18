@@ -1,4 +1,9 @@
-import WatchConnectivity from 'react-native-watch-connectivity';
+import {
+  watchEvents,
+  getReachability,
+  sendMessage,
+  updateApplicationContext,
+} from 'react-native-watch-connectivity';
 import { WatchMessage, WatchWorkoutUpdate } from '../types';
 
 type WorkoutUpdateHandler = (update: WatchWorkoutUpdate) => void;
@@ -11,14 +16,11 @@ class WatchService {
 
   async initialize(): Promise<void> {
     try {
-      const supported = await WatchConnectivity.isSupported();
-      if (!supported) return;
-
-      WatchConnectivity.watchEvents.on('reachabilityChanged', (reachable: boolean) => {
+      watchEvents.on('reachability', (reachable: boolean) => {
         this.isReachable = reachable;
       });
 
-      WatchConnectivity.watchEvents.on('message', (message: Record<string, unknown>) => {
+      watchEvents.on('message', (message: Record<string, unknown>) => {
         const watchMessage = message as unknown as WatchMessage;
         if (watchMessage.type === 'WORKOUT_UPDATE' && watchMessage.payload) {
           const update = watchMessage.payload as unknown as WatchWorkoutUpdate;
@@ -27,8 +29,7 @@ class WatchService {
         this.messageHandlers.forEach(h => h(watchMessage));
       });
 
-      const reachable = await WatchConnectivity.getReachability();
-      this.isReachable = reachable;
+      this.isReachable = await getReachability();
     } catch (e) {
       console.warn('[Watch] Init failed:', e);
     }
@@ -59,7 +60,7 @@ class WatchService {
       payload: params,
       timestamp: new Date().toISOString(),
     };
-    await WatchConnectivity.sendMessage(msg as unknown as Record<string, unknown>);
+    sendMessage(msg as unknown as Record<string, unknown>);
   }
 
   async sendNextExercise(exercise: {
@@ -75,7 +76,7 @@ class WatchService {
       payload: exercise,
       timestamp: new Date().toISOString(),
     };
-    await WatchConnectivity.sendMessage(msg as unknown as Record<string, unknown>);
+    sendMessage(msg as unknown as Record<string, unknown>);
   }
 
   async sendWorkoutEnd(summary: {
@@ -89,12 +90,12 @@ class WatchService {
       payload: summary,
       timestamp: new Date().toISOString(),
     };
-    await WatchConnectivity.sendMessage(msg as unknown as Record<string, unknown>);
+    sendMessage(msg as unknown as Record<string, unknown>);
   }
 
   async updateApplicationContext(context: Record<string, unknown>): Promise<void> {
     try {
-      await WatchConnectivity.updateApplicationContext(context);
+      updateApplicationContext(context);
     } catch (e) {
       console.warn('[Watch] Context update failed:', e);
     }

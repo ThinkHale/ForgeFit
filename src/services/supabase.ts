@@ -2,8 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 
-const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl as string;
-const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey as string;
+const supabaseUrl = (Constants.expoConfig?.extra?.supabaseUrl ?? 'REMOVED_SECRET') as string;
+const supabaseAnonKey = (Constants.expoConfig?.extra?.supabaseAnonKey ?? 'REMOVED_SECRET') as string;
 
 // Secure storage adapter for Supabase auth tokens
 const ExpoSecureStoreAdapter = {

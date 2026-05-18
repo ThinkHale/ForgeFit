@@ -2,6 +2,8 @@ import AppleHealthKit, {
   HealthKitPermissions,
   HealthValue,
   HealthInputOptions,
+  HealthActivityOptions,
+  HealthUnit,
 } from 'react-native-health';
 import { HealthSnapshot } from '../types';
 
@@ -17,25 +19,19 @@ const PERMISSIONS: HealthKitPermissions = {
       AppleHealthKit.Constants.Permissions.SleepAnalysis,
       AppleHealthKit.Constants.Permissions.Weight,
       AppleHealthKit.Constants.Permissions.BodyFatPercentage,
-      AppleHealthKit.Constants.Permissions.VO2Max,
+      AppleHealthKit.Constants.Permissions.Vo2Max,
       AppleHealthKit.Constants.Permissions.Workout,
-      AppleHealthKit.Constants.Permissions.ExerciseTime,
-      AppleHealthKit.Constants.Permissions.StandTime,
+      AppleHealthKit.Constants.Permissions.AppleExerciseTime,
+      AppleHealthKit.Constants.Permissions.AppleStandTime,
       AppleHealthKit.Constants.Permissions.DistanceWalkingRunning,
-      AppleHealthKit.Constants.Permissions.DietaryEnergyConsumed,
-      AppleHealthKit.Constants.Permissions.DietaryProtein,
-      AppleHealthKit.Constants.Permissions.DietaryCarbohydrates,
-      AppleHealthKit.Constants.Permissions.DietaryFatTotal,
+      AppleHealthKit.Constants.Permissions.EnergyConsumed,
     ],
     write: [
       AppleHealthKit.Constants.Permissions.Steps,
       AppleHealthKit.Constants.Permissions.ActiveEnergyBurned,
       AppleHealthKit.Constants.Permissions.Workout,
       AppleHealthKit.Constants.Permissions.Weight,
-      AppleHealthKit.Constants.Permissions.DietaryEnergyConsumed,
-      AppleHealthKit.Constants.Permissions.DietaryProtein,
-      AppleHealthKit.Constants.Permissions.DietaryCarbohydrates,
-      AppleHealthKit.Constants.Permissions.DietaryFatTotal,
+      AppleHealthKit.Constants.Permissions.EnergyConsumed,
     ],
   },
 };
@@ -120,7 +116,7 @@ class HealthService {
 
   async getLatestWeight(): Promise<number | null> {
     return new Promise((resolve) => {
-      const opts: HealthInputOptions = { limit: 1, ascending: false, unit: 'pound' };
+      const opts: HealthInputOptions = { limit: 1, ascending: false, unit: HealthUnit.pound };
       AppleHealthKit.getWeightSamples(opts, (err, results) => {
         if (err || !Array.isArray(results) || !results.length) { resolve(null); return; }
         resolve(results[0].value ?? null);
@@ -152,12 +148,10 @@ class HealthService {
     calories: number;
   }): Promise<void> {
     return new Promise((resolve, reject) => {
-      const opts = {
-        type: 'TraditionalStrengthTraining',
+      const opts: HealthActivityOptions = {
+        type: AppleHealthKit.Constants.Activities.TraditionalStrengthTraining,
         startDate: params.startDate,
         endDate: params.endDate,
-        energyBurned: params.calories,
-        energyBurnedUnit: 'calorie' as const,
       };
       AppleHealthKit.saveWorkout(opts, (err) => {
         if (err) reject(err); else resolve();
@@ -175,7 +169,8 @@ class HealthService {
     const date = params.date ?? new Date().toISOString();
     await Promise.all([
       new Promise<void>((resolve) => {
-        AppleHealthKit.saveFood({ foodName: 'Forge Log', calories: params.calories, date }, (err) => { resolve(); });
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        AppleHealthKit.saveFood({ date } as any, (err) => { resolve(); });
       }),
     ]);
   }

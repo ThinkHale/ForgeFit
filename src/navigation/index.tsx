@@ -9,6 +9,7 @@ import { colors, typography } from '../theme';
 import { useStore } from '../store';
 
 // Screens
+import AuthScreen from '../screens/Auth/AuthScreen';
 import OnboardingScreen from '../screens/Onboarding/OnboardingScreen';
 import HomeScreen from '../screens/Home/HomeScreen';
 import CoachScreen from '../screens/Coach/CoachScreen';
@@ -17,16 +18,6 @@ import NutritionScreen from '../screens/Nutrition/NutritionScreen';
 // Placeholder screens
 function WorkoutsScreen() { return <View style={p.c}><Text style={p.t}>Workouts</Text></View>; }
 function ProgressScreen() { return <View style={p.c}><Text style={p.t}>Progress</Text></View>; }
-function AuthScreen({ navigation }: any) {
-  return (
-    <View style={p.c}>
-      <Text style={p.t}>Auth Screen</Text>
-      <Text style={{ color: colors.text.secondary, marginTop: 8, textAlign: 'center' }}>
-        Implement Sign In with Apple + email/password using Supabase Auth.
-      </Text>
-    </View>
-  );
-}
 const p = StyleSheet.create({ c: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 }, t: { fontSize: 24, fontWeight: '700', color: colors.text.primary } });
 
 const Stack = createNativeStackNavigator();

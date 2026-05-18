@@ -40,6 +40,7 @@ module.exports = {
     plugins: [
       'expo-font',
       'expo-secure-store',
+      'expo-apple-authentication',
       [
         'expo-notifications',
         {
