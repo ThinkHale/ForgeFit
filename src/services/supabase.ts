@@ -2,8 +2,12 @@ import { createClient } from '@supabase/supabase-js';
 import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 
-const supabaseUrl = (Constants.expoConfig?.extra?.supabaseUrl ?? 'REMOVED_SECRET') as string;
-const supabaseAnonKey = (Constants.expoConfig?.extra?.supabaseAnonKey ?? 'REMOVED_SECRET') as string;
+const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl as string;
+const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey as string;
+
+if (!supabaseUrl || !supabaseAnonKey) {
+  throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY — check your .env file.');
+}
 
 // Secure storage adapter for Supabase auth tokens
 const ExpoSecureStoreAdapter = {
