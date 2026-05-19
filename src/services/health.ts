@@ -55,13 +55,15 @@ class HealthService {
 
   async getTodaySnapshot(): Promise<Partial<HealthSnapshot>> {
     if (!this.initialized) return {};
-    const today = new Date();
-    const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-    const now = new Date().toISOString();
+    const now = new Date();
+    const startOfDay = new Date(now);
+    startOfDay.setHours(0, 0, 0, 0);
+    const startOfDayISO = startOfDay.toISOString();
+    const nowISO = now.toISOString();
 
     const [steps, activeCalories, heartRate, restingHR] = await Promise.allSettled([
-      this.getSteps(startOfDay, now),
-      this.getActiveCalories(startOfDay, now),
+      this.getSteps(startOfDayISO, nowISO),
+      this.getActiveCalories(startOfDayISO, nowISO),
       this.getLatestHeartRate(),
       this.getRestingHeartRate(),
     ]);
@@ -159,21 +161,6 @@ class HealthService {
     });
   }
 
-  async logNutrition(params: {
-    calories: number;
-    protein: number;
-    carbs: number;
-    fat: number;
-    date?: string;
-  }): Promise<void> {
-    const date = params.date ?? new Date().toISOString();
-    await Promise.all([
-      new Promise<void>((resolve) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        AppleHealthKit.saveFood({ date } as any, (err) => { resolve(); });
-      }),
-    ]);
-  }
 }
 
 export const healthService = new HealthService();

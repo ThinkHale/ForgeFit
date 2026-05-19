@@ -1,25 +1,17 @@
-import Constants from 'expo-constants';
+import { supabase } from './supabase';
 import { UserProfile, ChatMessage, HealthSnapshot, DailyNutrition } from '../types';
-
-const ANTHROPIC_API_KEY = Constants.expoConfig?.extra?.anthropicApiKey as string;
-const MODEL = 'claude-sonnet-4-20250514';
 
 async function callClaude(
   messages: Array<{ role: string; content: string }>,
   system: string,
   maxTokens = 1000
 ): Promise<string> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': ANTHROPIC_API_KEY,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({ model: MODEL, max_tokens: maxTokens, system, messages }),
+  const { data, error } = await supabase.functions.invoke('claude', {
+    body: { messages, system, maxTokens },
   });
-  const data = await res.json();
-  return data.content?.[0]?.text ?? '';
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return (data?.text as string) ?? '';
 }
 
 // ─── System prompt builder ────────────────────────────────────────────────────
@@ -154,8 +146,11 @@ export async function extractMemoryUpdate(
   );
 
   try {
-    const clean = raw.replace(/```json|```/g, '').trim();
-    return JSON.parse(clean);
+    // Slice from first { to last } to handle any surrounding prose or code fences
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1) return {};
+    return JSON.parse(raw.slice(firstBrace, lastBrace + 1));
   } catch {
     return {};
   }
@@ -185,8 +180,10 @@ export async function parseNaturalLanguageFood(description: string): Promise<{
       NUTRITION_PARSE_SYSTEM,
       300
     );
-    const clean = raw.replace(/```json|```/g, '').trim();
-    return JSON.parse(clean);
+    const firstBrace = raw.indexOf('{');
+    const lastBrace = raw.lastIndexOf('}');
+    if (firstBrace === -1 || lastBrace === -1) return null;
+    return JSON.parse(raw.slice(firstBrace, lastBrace + 1));
   } catch {
     return null;
   }

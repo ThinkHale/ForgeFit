@@ -8,7 +8,6 @@ import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
 import { parseNaturalLanguageFood } from '../../services/coach';
-import { healthService } from '../../services/health';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 import { MealType, MealEntry } from '../../types';
 import { format } from 'date-fns';
@@ -209,7 +208,7 @@ function GoalSettingsModal({ visible, onClose }: { visible: boolean; onClose: ()
 }
 
 export default function NutritionScreen() {
-  const { nutritionToday, profile, addMealEntry, removeMealEntry, loadNutritionToday } = useStore();
+  const { nutritionToday, profile, addMealEntry, removeMealEntry, loadNutritionToday, user } = useStore();
   const [activeMeal, setActiveMeal] = useState<MealType | null>(null);
   const [showGoals, setShowGoals] = useState(false);
 
@@ -226,19 +225,11 @@ export default function NutritionScreen() {
       const full: MealEntry = {
         ...entry,
         id: Date.now().toString(),
-        userId: '',
+        userId: user?.id ?? '',
         date: today,
         loggedAt: new Date().toISOString(),
       };
       await addMealEntry(full);
-      try {
-        await healthService.logNutrition({
-          calories: full.foodItem.calories * full.servings,
-          protein:  full.foodItem.protein  * full.servings,
-          carbs:    full.foodItem.carbs    * full.servings,
-          fat:      full.foodItem.fat      * full.servings,
-        });
-      } catch {}
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
       Alert.alert('Error', 'Could not save food entry. Check your connection and try again.');

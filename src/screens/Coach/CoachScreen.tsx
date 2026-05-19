@@ -62,16 +62,17 @@ export default function CoachScreen({ route }: { route?: any }) {
   const { profile, chatMessages, isChatLoading, addChatMessage, setChatLoading, runMemoryExtraction, healthToday, nutritionToday } = useStore();
   const [input, setInput] = useState('');
   const scrollRef = useRef<ScrollView>(null);
-  const userTurnCount = chatMessages.filter(m => m.role === 'user').length;
+  const hasGreetedRef = useRef(false);
 
   useEffect(() => {
     const msg = route?.params?.initialMessage;
     if (msg) setInput(msg);
   }, [route?.params?.initialMessage]);
 
-  // Initial greeting
+  // Initial greeting — guard with ref so it only fires once even if profile updates
   useEffect(() => {
-    if (chatMessages.length === 0 && profile) {
+    if (chatMessages.length === 0 && profile && !hasGreetedRef.current) {
+      hasGreetedRef.current = true;
       const greeting: ChatMessage = {
         id: Date.now().toString(),
         role: 'assistant',
@@ -112,8 +113,10 @@ export default function CoachScreen({ route }: { route?: any }) {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
+      // Read fresh store state at call time — avoids stale closure over chatMessages
+      const freshMessages = useStore.getState().chatMessages;
       const systemPrompt = buildCoachSystemPrompt(profile, healthToday ?? undefined, nutritionToday ?? undefined);
-      const apiMessages = [...chatMessages, userMsg].map(m => ({ role: m.role, content: m.content }));
+      const apiMessages = freshMessages.map(m => ({ role: m.role, content: m.content }));
       const reply = await callClaude(apiMessages, systemPrompt);
       const assistantMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -124,9 +127,9 @@ export default function CoachScreen({ route }: { route?: any }) {
       addChatMessage(assistantMsg);
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      // Run memory extraction every 3 user turns
-      const newCount = userTurnCount + 1;
-      if (newCount % 3 === 0) {
+      // Re-read count after state update to avoid stale closure
+      const freshUserCount = useStore.getState().chatMessages.filter(m => m.role === 'user').length;
+      if (freshUserCount % 3 === 0) {
         runMemoryExtraction();
       }
     } catch {
@@ -139,7 +142,7 @@ export default function CoachScreen({ route }: { route?: any }) {
     } finally {
       setChatLoading(false);
     }
-  }, [input, isChatLoading, chatMessages, profile, healthToday, nutritionToday, userTurnCount]);
+  }, [input, isChatLoading, profile, healthToday, nutritionToday]);
 
   const bondPct = Math.min(100, ((profile?.sessionCount ?? 0) / 10) * 100);
 

@@ -6,7 +6,7 @@ const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl as string;
 const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey as string;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error('Missing SUPABASE_URL or SUPABASE_ANON_KEY — check your .env file.');
+  console.error('[Supabase] Missing SUPABASE_URL or SUPABASE_ANON_KEY — check your .env file and app.config.js extra fields.');
 }
 
 // Secure storage adapter for Supabase auth tokens

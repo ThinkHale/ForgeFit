@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -69,8 +69,16 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  const { user, profile } = useStore();
+  const { user, profile, isAuthLoading } = useStore();
   const isNew = !profile || profile.sessionCount === 0;
+
+  if (isAuthLoading) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#FF4500" />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>

@@ -22,26 +22,14 @@ export default function App() {
           name: session.user.user_metadata?.name ?? '',
           createdAt: session.user.created_at,
         });
-        if (event === 'SIGNED_IN') {
+        // INITIAL_SESSION fires on cold launch; SIGNED_IN fires on explicit login.
+        // TOKEN_REFRESHED is excluded — it fires when returning from background (e.g.
+        // after a HealthKit permission dialog) and would race with an in-progress
+        // saveProfile call, resetting sessionCount back to 0.
+        if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           await loadProfile();
           loadNutritionToday();
         }
-      } else {
-        setUser(null);
-      }
-    });
-
-    // Check existing session on startup
-    authService.getSession().then(async session => {
-      if (session?.user) {
-        setUser({
-          id: session.user.id,
-          email: session.user.email ?? '',
-          name: session.user.user_metadata?.name ?? '',
-          createdAt: session.user.created_at,
-        });
-        await loadProfile();
-        loadNutritionToday();
       } else {
         setUser(null);
       }

@@ -125,7 +125,10 @@ export const useStore = create<AppState>((set, get) => ({
   // ── Auth ──────────────────────────────────────────────────────────────────────
   user: null,
   isAuthLoading: true,
-  setUser: (user) => set({ user, isAuthLoading: false }),
+  // Keep isAuthLoading:true when a non-null user arrives so the navigator waits
+  // for loadProfile() to finish before deciding which screen to show.
+  // Only flip to false when user is null (no session → show Auth immediately).
+  setUser: (user) => set(user ? { user } : { user, isAuthLoading: false }),
 
   // ── Profile ───────────────────────────────────────────────────────────────────
   profile: null,
@@ -154,13 +157,12 @@ export const useStore = create<AppState>((set, get) => ({
       }
     } catch (e) {
       console.warn('[Profile] loadProfile failed:', e);
-      // Ensure profile is non-null so saveProfile can proceed
       const { user: u } = get();
       if (u && !get().profile) {
         set({ profile: { ...EMPTY_PROFILE, userId: u.id } });
       }
     } finally {
-      set({ isProfileLoading: false });
+      set({ isProfileLoading: false, isAuthLoading: false });
     }
   },
 
@@ -175,7 +177,10 @@ export const useStore = create<AppState>((set, get) => ({
         { user_id: user.id, ...profileToDb(next) },
         { onConflict: 'user_id' }
       );
-    if (error) console.warn('[Profile] upsert failed:', error);
+    if (error) {
+      console.warn('[Profile] upsert failed:', error);
+      set({ profile }); // rollback optimistic update so DB stays authoritative
+    }
   },
 
   mergeMemoryUpdate: async (updates) => {
@@ -278,8 +283,8 @@ export const useStore = create<AppState>((set, get) => ({
           fatGoal: profile?.dailyFatGoal ?? 65,
         },
       });
-    } catch {
-      // table may not exist or network error — leave nutritionToday as-is
+    } catch (e) {
+      console.warn('[Nutrition] loadNutritionToday failed:', e);
     } finally {
       set({ isNutritionLoading: false });
     }

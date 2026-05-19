@@ -13,8 +13,11 @@ class WatchService {
   private updateHandlers: WorkoutUpdateHandler[] = [];
   private messageHandlers: MessageHandler[] = [];
   private isReachable = false;
+  private initialized = false;
 
   async initialize(): Promise<void> {
+    if (this.initialized) return;
+    this.initialized = true;
     try {
       watchEvents.on('reachability', (reachable: boolean) => {
         this.isReachable = reachable;
@@ -31,6 +34,7 @@ class WatchService {
 
       this.isReachable = await getReachability();
     } catch (e) {
+      this.initialized = false; // allow retry if init failed
       console.warn('[Watch] Init failed:', e);
     }
   }

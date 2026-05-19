@@ -10,21 +10,25 @@ import { useStore } from '../../store';
 import { healthService } from '../../services/health';
 import { watchService } from '../../services/watch';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
+import { UserProfile } from '../../types';
 
 const { width } = Dimensions.get('window');
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
-const GOALS = [
-  { id: 'lose_weight',    icon: '🔥', label: 'Lose weight',     sub: 'Burn fat, get lean' },
-  { id: 'build_muscle',   icon: '💪', label: 'Build muscle',    sub: 'Get stronger & bigger' },
+type PrimaryGoalId = NonNullable<UserProfile['primaryGoal']>;
+type FitnessLevelId = NonNullable<UserProfile['fitnessLevel']>;
+
+const GOALS: Array<{ id: PrimaryGoalId; icon: string; label: string; sub: string }> = [
+  { id: 'lose_weight',    icon: '🔥', label: 'Lose weight',       sub: 'Burn fat, get lean' },
+  { id: 'build_muscle',   icon: '💪', label: 'Build muscle',      sub: 'Get stronger & bigger' },
   { id: 'endurance',      icon: '🏃', label: 'Improve endurance', sub: 'Run further, last longer' },
-  { id: 'general_fitness',icon: '⚡', label: 'General fitness', sub: 'Feel great & stay active' },
+  { id: 'general_fitness',icon: '⚡', label: 'General fitness',   sub: 'Feel great & stay active' },
 ];
 
-const FITNESS_LEVELS = [
-  { id: 'beginner',     icon: '🌱', label: 'New to fitness',    sub: 'Just getting started' },
-  { id: 'intermediate', icon: '🌿', label: 'Some experience',   sub: '1-2 years working out' },
-  { id: 'advanced',     icon: '🌳', label: 'Very experienced',  sub: '3+ years, serious training' },
+const FITNESS_LEVELS: Array<{ id: FitnessLevelId; icon: string; label: string; sub: string }> = [
+  { id: 'beginner',     icon: '🌱', label: 'New to fitness',   sub: 'Just getting started' },
+  { id: 'intermediate', icon: '🌿', label: 'Some experience',  sub: '1-2 years working out' },
+  { id: 'advanced',     icon: '🌳', label: 'Very experienced', sub: '3+ years, serious training' },
 ];
 
 const DAYS = [2, 3, 4, 5, 6];
@@ -80,8 +84,8 @@ export default function OnboardingScreen({ navigation }: { navigation: any }) {
   const { saveProfile, profile } = useStore();
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
-  const [goal, setGoal] = useState<string | null>(null);
-  const [level, setLevel] = useState<string | null>(null);
+  const [goal, setGoal] = useState<PrimaryGoalId | null>(null);
+  const [level, setLevel] = useState<FitnessLevelId | null>(null);
   const [days, setDays] = useState<number | null>(null);
   const [healthPermission, setHealthPermission] = useState<boolean | null>(null);
 
@@ -98,18 +102,18 @@ export default function OnboardingScreen({ navigation }: { navigation: any }) {
   async function finish() {
     await saveProfile({
       name: name.trim() || null,
-      primaryGoal: goal as any,
-      fitnessLevel: level as any,
+      primaryGoal: goal,
+      fitnessLevel: level,
       availableDays: days,
       sessionCount: 1,
     });
-    watchService.initialize();
+    try { watchService.initialize(); } catch {}
   }
 
-  function next() {
+  async function next() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     if (step < STEPS - 1) setStep(s => s + 1);
-    else finish();
+    else await finish();
   }
 
   const canProgress = [

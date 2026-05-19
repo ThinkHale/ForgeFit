@@ -109,7 +109,7 @@ export default function WorkoutsScreen({ navigation }: { navigation: any }) {
 
   function goToCoach(prompt: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.jumpTo('Coach', { initialMessage: prompt });
+    navigation.navigate('Coach', { initialMessage: prompt });
   }
 
   return (
