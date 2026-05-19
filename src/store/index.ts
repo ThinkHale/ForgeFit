@@ -293,8 +293,9 @@ export const useStore = create<AppState>((set, get) => ({
   addMealEntry: async (entry) => {
     const { user } = get();
     if (!user) return;
-    await supabase.from('meal_entries').insert({
-      id: entry.id,
+    // Omit id — the DB column is UUID type and generates its own via uuid_generate_v4().
+    // Passing a non-UUID string (e.g. Date.now()) causes a silent Postgres type error.
+    const { error } = await supabase.from('meal_entries').insert({
       user_id: user.id,
       food_item: entry.foodItem,
       meal_type: entry.mealType,
@@ -302,6 +303,10 @@ export const useStore = create<AppState>((set, get) => ({
       logged_at: entry.loggedAt,
       date: entry.date,
     });
+    if (error) {
+      console.warn('[Nutrition] addMealEntry failed:', error);
+      throw error;
+    }
     await get().loadNutritionToday();
   },
 

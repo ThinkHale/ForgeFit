@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
-import { parseNaturalLanguageFood } from '../../services/coach';
+import { parseFood, NutritionResult } from '../../services/nutrition';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 import { MealType, MealEntry } from '../../types';
 import { format } from 'date-fns';
@@ -19,50 +19,57 @@ const MEAL_SECTIONS: { type: MealType; label: string; icon: string; timeHint: st
   { type: 'snack',     label: 'Snacks',    icon: '🍎', timeHint: 'Between meals' },
 ];
 
-// ─── AI Food Logger ───────────────────────────────────────────────────────────
+const SOURCE_LABEL: Record<string, string> = { usda: 'USDA', nutritionix: 'Nutritionix' };
+
+// ─── Food Logger ──────────────────────────────────────────────────────────────
 function AIFoodLogger({ mealType, onClose, onAdd }: {
   mealType: MealType; onClose: () => void;
   onAdd: (entry: Omit<MealEntry, 'id' | 'userId' | 'date' | 'loggedAt'>) => void;
 }) {
   const [input, setInput] = useState('');
-  const [parsing, setParsing] = useState(false);
-  const [parsed, setParsed] = useState<{
-    name: string; calories: number; protein: number; carbs: number; fat: number;
-    servingSize: number; servingUnit: string;
-  } | null>(null);
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<NutritionResult[]>([]);
+  const [selected, setSelected] = useState<NutritionResult | null>(null);
   const [servings, setServings] = useState('1');
 
-  async function handleParse() {
+  async function handleSearch() {
     if (!input.trim()) return;
-    setParsing(true);
+    setSearching(true);
+    setResults([]);
+    setSelected(null);
     try {
-      const result = await parseNaturalLanguageFood(input);
-      if (result) {
-        setParsed(result);
+      const found = await parseFood(input.trim());
+      if (found.length > 0) {
+        setResults(found);
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        Alert.alert('Could not parse', 'Try describing the food differently, like "2 scrambled eggs with cheese".');
+        Alert.alert('No results', 'Try a simpler description, like "scrambled eggs" or "chicken breast".');
       }
     } catch {
-      Alert.alert('Error', 'Could not connect to AI. Check your connection.');
+      Alert.alert('Error', 'Could not reach the nutrition database. Check your connection.');
     } finally {
-      setParsing(false);
+      setSearching(false);
     }
   }
 
+  function selectResult(r: NutritionResult) {
+    setSelected(r);
+    Haptics.selectionAsync();
+  }
+
   function handleAdd() {
-    if (!parsed) return;
+    if (!selected) return;
     const sv = parseFloat(servings) || 1;
     onAdd({
       foodItem: {
         id: Date.now().toString(),
-        name: parsed.name,
-        servingSize: parsed.servingSize,
-        servingUnit: parsed.servingUnit,
-        calories: parsed.calories,
-        protein: parsed.protein,
-        carbs: parsed.carbs,
-        fat: parsed.fat,
+        name: selected.name,
+        servingSize: selected.servingSize,
+        servingUnit: selected.servingUnit,
+        calories: selected.calories,
+        protein: selected.protein,
+        carbs: selected.carbs,
+        fat: selected.fat,
       },
       mealType,
       servings: sv,
@@ -70,42 +77,72 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
     onClose();
   }
 
+  const mealLabel = MEAL_SECTIONS.find(m => m.type === mealType)?.label;
+
   return (
     <View style={logStyles.sheet}>
       <View style={logStyles.handle} />
-      <Text style={logStyles.sheetTitle}>Add to {MEAL_SECTIONS.find(m => m.type === mealType)?.label}</Text>
+      <Text style={logStyles.sheetTitle}>Add to {mealLabel}</Text>
+      <Text style={logStyles.sheetHint}>Describe what you ate — data sourced from USDA &amp; Nutritionix</Text>
 
-      <Text style={logStyles.sheetHint}>Describe what you ate in plain English</Text>
       <View style={logStyles.inputRow}>
         <TextInput
           style={logStyles.input}
           placeholder="e.g. 2 eggs with avocado toast..."
           placeholderTextColor={colors.text.tertiary}
           value={input}
-          onChangeText={setInput}
-          onSubmitEditing={handleParse}
+          onChangeText={v => { setInput(v); if (results.length) { setResults([]); setSelected(null); } }}
+          onSubmitEditing={handleSearch}
           autoFocus
         />
         <TouchableOpacity
-          onPress={handleParse}
-          disabled={parsing || !input.trim()}
+          onPress={handleSearch}
+          disabled={searching || !input.trim()}
           style={[logStyles.parseBtn, { opacity: !input.trim() ? 0.4 : 1 }]}
         >
-          {parsing
+          {searching
             ? <ActivityIndicator color="#fff" size="small" />
-            : <Text style={logStyles.parseBtnText}>AI Parse</Text>}
+            : <Text style={logStyles.parseBtnText}>Search</Text>}
         </TouchableOpacity>
       </View>
 
-      {parsed && (
+      {/* Result list */}
+      {results.length > 0 && !selected && (
+        <View style={logStyles.resultList}>
+          {results.map((r, i) => (
+            <TouchableOpacity key={i} onPress={() => selectResult(r)} style={logStyles.resultRow} activeOpacity={0.7}>
+              <View style={{ flex: 1 }}>
+                <Text style={logStyles.resultName} numberOfLines={1}>{r.name}</Text>
+                {r.brand && <Text style={logStyles.resultBrand} numberOfLines={1}>{r.brand}</Text>}
+                <Text style={logStyles.resultMacros}>
+                  {r.calories} kcal · {r.protein}g P · {r.carbs}g C · {r.fat}g F
+                  <Text style={logStyles.resultPer}> per {r.servingSize}{r.servingUnit}</Text>
+                </Text>
+              </View>
+              <Text style={logStyles.resultSource}>{SOURCE_LABEL[r.source]}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+
+      {/* Confirmed selection */}
+      {selected && (
         <View style={logStyles.parsedCard}>
-          <Text style={logStyles.parsedName}>{parsed.name}</Text>
+          <View style={logStyles.parsedHeader}>
+            <View style={{ flex: 1 }}>
+              <Text style={logStyles.parsedName}>{selected.name}</Text>
+              {selected.brand && <Text style={logStyles.resultBrand}>{selected.brand}</Text>}
+            </View>
+            <TouchableOpacity onPress={() => setSelected(null)} style={logStyles.changeBtn}>
+              <Text style={logStyles.changeBtnText}>Change</Text>
+            </TouchableOpacity>
+          </View>
           <View style={logStyles.parsedMacros}>
             {[
-              { label: 'Cal', val: parsed.calories, color: colors.brand.primary },
-              { label: 'P', val: `${parsed.protein}g`, color: colors.brand.electric },
-              { label: 'C', val: `${parsed.carbs}g`, color: colors.brand.accent },
-              { label: 'F', val: `${parsed.fat}g`, color: colors.brand.secondary },
+              { label: 'Cal', val: selected.calories,         color: colors.brand.primary },
+              { label: 'P',   val: `${selected.protein}g`,   color: colors.brand.electric },
+              { label: 'C',   val: `${selected.carbs}g`,     color: colors.brand.accent },
+              { label: 'F',   val: `${selected.fat}g`,       color: colors.brand.secondary },
             ].map(m => (
               <View key={m.label} style={logStyles.parsedMacro}>
                 <Text style={[logStyles.parsedMacroVal, { color: m.color }]}>{m.val}</Text>
@@ -113,6 +150,7 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
               </View>
             ))}
           </View>
+          <Text style={logStyles.perServing}>per {selected.servingSize}{selected.servingUnit} · {SOURCE_LABEL[selected.source]}</Text>
           <View style={logStyles.servingsRow}>
             <Text style={logStyles.servingsLabel}>Servings</Text>
             <TextInput
@@ -432,9 +470,20 @@ const logStyles = StyleSheet.create({
   input:        { flex: 1, backgroundColor: colors.background.secondary, borderRadius: radius.md, padding: spacing.md, ...typography.body, color: colors.text.primary },
   parseBtn:     { backgroundColor: colors.brand.primary, borderRadius: radius.md, paddingHorizontal: spacing.md, justifyContent: 'center' },
   parseBtnText: { ...typography.smallMed, color: '#fff' },
+  resultList:   { borderRadius: radius.md, overflow: 'hidden', marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border.light },
+  resultRow:    { flexDirection: 'row', alignItems: 'center', padding: spacing.md, backgroundColor: colors.background.primary, borderBottomWidth: 1, borderBottomColor: colors.border.light },
+  resultName:   { ...typography.smallMed, color: colors.text.primary, marginBottom: 2 },
+  resultBrand:  { ...typography.caption, color: colors.text.secondary, marginBottom: 2 },
+  resultMacros: { ...typography.caption, color: colors.text.secondary },
+  resultPer:    { color: colors.text.tertiary },
+  resultSource: { ...typography.caption, color: colors.brand.primary, fontWeight: '600', marginLeft: spacing.sm },
   parsedCard:   { backgroundColor: colors.glass.brand, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md },
-  parsedName:   { ...typography.h4, color: colors.text.primary, marginBottom: spacing.sm },
-  parsedMacros: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.md },
+  parsedHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.sm },
+  parsedName:   { ...typography.h4, color: colors.text.primary },
+  changeBtn:    { paddingHorizontal: spacing.sm, paddingVertical: 4, backgroundColor: colors.background.secondary, borderRadius: radius.sm },
+  changeBtnText: { ...typography.caption, color: colors.brand.primary, fontWeight: '600' },
+  perServing:   { ...typography.caption, color: colors.text.tertiary, marginBottom: spacing.md },
+  parsedMacros: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
   parsedMacro:  { alignItems: 'center' },
   parsedMacroVal: { ...typography.bodyMed },
   parsedMacroLabel: { ...typography.caption, color: colors.text.secondary },

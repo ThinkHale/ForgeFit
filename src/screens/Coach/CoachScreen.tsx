@@ -7,7 +7,8 @@ import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
-import { callClaude, buildCoachSystemPrompt } from '../../services/coach';
+import { callClaude, buildCoachSystemPrompt, ClaudeResponse } from '../../services/coach';
+import { FORGE_TOOLS, executeTool } from '../../services/tools';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 import { ChatMessage } from '../../types';
 
@@ -113,25 +114,68 @@ export default function CoachScreen({ route }: { route?: any }) {
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      // Read fresh store state at call time — avoids stale closure over chatMessages
-      const freshMessages = useStore.getState().chatMessages;
       const systemPrompt = buildCoachSystemPrompt(profile, healthToday ?? undefined, nutritionToday ?? undefined);
-      const apiMessages = freshMessages.map(m => ({ role: m.role, content: m.content }));
-      const reply = await callClaude(apiMessages, systemPrompt);
-      const assistantMsg: ChatMessage = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: reply,
-        timestamp: new Date().toISOString(),
-      };
-      addChatMessage(assistantMsg);
-      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-      // Re-read count after state update to avoid stale closure
-      const freshUserCount = useStore.getState().chatMessages.filter(m => m.role === 'user').length;
-      if (freshUserCount % 3 === 0) {
-        runMemoryExtraction();
+      // Seed the API message list from the live store (avoids stale closure)
+      type ContentBlock = { type: string; [key: string]: unknown };
+      type ApiMessage = { role: string; content: string | ContentBlock[] };
+      const apiMessages: ApiMessage[] = useStore.getState().chatMessages
+        .map(m => ({ role: m.role, content: m.content }));
+
+      // Agentic loop — Claude may call tools before giving a final text response
+      let finalText = '';
+      const MAX_ITERATIONS = 5;
+
+      for (let i = 0; i < MAX_ITERATIONS; i++) {
+        const response: ClaudeResponse = await callClaude(
+          apiMessages,
+          systemPrompt,
+          1500,
+          [...FORGE_TOOLS]
+        );
+
+        if (response.toolUses.length === 0) {
+          // No tools called — this is the final response
+          finalText = response.text;
+          break;
+        }
+
+        // Append assistant turn (text + tool_use blocks) to in-memory messages
+        const assistantContent: ContentBlock[] = [];
+        if (response.text) assistantContent.push({ type: 'text', text: response.text });
+        for (const tu of response.toolUses) {
+          assistantContent.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
+        }
+        apiMessages.push({ role: 'assistant', content: assistantContent });
+
+        // Execute all tool calls in parallel
+        const toolResults = await Promise.all(response.toolUses.map(executeTool));
+
+        // Append tool results as a user turn
+        apiMessages.push({
+          role: 'user',
+          content: toolResults.map(r => ({
+            type: 'tool_result',
+            tool_use_id: r.tool_use_id,
+            content: r.content,
+          })),
+        });
       }
+
+      if (finalText) {
+        addChatMessage({
+          id: (Date.now() + 1).toString(),
+          role: 'assistant',
+          content: finalText,
+          timestamp: new Date().toISOString(),
+        });
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      }
+
+      // Memory extraction every 3 user turns
+      const freshUserCount = useStore.getState().chatMessages.filter(m => m.role === 'user').length;
+      if (freshUserCount % 3 === 0) runMemoryExtraction();
+
     } catch {
       addChatMessage({
         id: (Date.now() + 1).toString(),

@@ -129,11 +129,18 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     ActionSheetIOS.showActionSheetWithOptions(
       {
         title: profile?.name ?? 'Profile',
-        options: ['Sign Out', 'Cancel'],
-        cancelButtonIndex: 1,
-        destructiveButtonIndex: 0,
+        options: ['Connect Apple Health', 'Sign Out', 'Cancel'],
+        cancelButtonIndex: 2,
+        destructiveButtonIndex: 1,
       },
-      (i) => { if (i === 0) authService.signOut().catch(() => {}); }
+      async (i) => {
+        if (i === 0) {
+          const granted = await healthService.initialize();
+          if (granted) loadHealthData();
+        } else if (i === 1) {
+          authService.signOut().catch(() => {});
+        }
+      }
     );
   }
 

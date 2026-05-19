@@ -1,0 +1,41 @@
+import { supabase } from './supabase';
+
+export interface NutritionResult {
+  name: string;
+  brand?: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  servingSize: number;
+  servingUnit: string;
+  source: 'usda' | 'nutritionix';
+  fdcId?: number;
+}
+
+/** Keyword search — good for browsing, e.g. "chicken breast" */
+export async function searchFood(query: string): Promise<NutritionResult[]> {
+  if (!query.trim()) return [];
+  const { data, error } = await supabase.functions.invoke('nutrition', {
+    body: { query, mode: 'search' },
+  });
+  if (error || data?.error) {
+    console.warn('[Nutrition] searchFood failed:', error ?? data?.error);
+    return [];
+  }
+  return (data?.results as NutritionResult[]) ?? [];
+}
+
+/** Natural language parse — good for descriptions, e.g. "2 scrambled eggs with cheese"
+ *  Uses Nutritionix when available, falls back to USDA keyword search. */
+export async function parseFood(description: string): Promise<NutritionResult[]> {
+  if (!description.trim()) return [];
+  const { data, error } = await supabase.functions.invoke('nutrition', {
+    body: { query: description, mode: 'parse' },
+  });
+  if (error || data?.error) {
+    console.warn('[Nutrition] parseFood failed:', error ?? data?.error);
+    return [];
+  }
+  return (data?.results as NutritionResult[]) ?? [];
+}

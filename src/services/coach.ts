@@ -1,17 +1,48 @@
 import { supabase } from './supabase';
 import { UserProfile, ChatMessage, HealthSnapshot, DailyNutrition } from '../types';
+import { ToolUse } from './tools';
+import { parseFood } from './nutrition';
 
-async function callClaude(
-  messages: Array<{ role: string; content: string }>,
+// ─── Claude API call ──────────────────────────────────────────────────────────
+
+type ContentBlock = {
+  type: string;
+  text?: string;
+  id?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+};
+
+type ApiMessage = {
+  role: string;
+  content: string | ContentBlock[];
+};
+
+export interface ClaudeResponse {
+  text: string;
+  toolUses: ToolUse[];
+  stopReason: string;
+}
+
+export async function callClaude(
+  messages: ApiMessage[],
   system: string,
-  maxTokens = 1000
-): Promise<string> {
+  maxTokens = 1500,
+  tools?: unknown[]
+): Promise<ClaudeResponse> {
   const { data, error } = await supabase.functions.invoke('claude', {
-    body: { messages, system, maxTokens },
+    body: { messages, system, maxTokens, tools },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
-  return (data?.text as string) ?? '';
+
+  const content: ContentBlock[] = data.content ?? [];
+  const text = content.find(b => b.type === 'text')?.text ?? '';
+  const toolUses: ToolUse[] = content
+    .filter(b => b.type === 'tool_use')
+    .map(b => ({ id: b.id!, name: b.name!, input: b.input ?? {} }));
+
+  return { text, toolUses, stopReason: data.stop_reason ?? 'end_turn' };
 }
 
 // ─── System prompt builder ────────────────────────────────────────────────────
@@ -42,7 +73,7 @@ Fat: ${nutritionToday.totalFat ?? 0}g`
     : '';
 
   const profileBlock = profile.sessionCount === 0
-    ? `This is the user's FIRST session. You don't know them yet. Warmly introduce yourself as Forge, their AI training partner. Ask their name and what brings them here. Be curious and human. Gather info naturally -- never ask multiple questions at once.`
+    ? `This is the user's FIRST session. You don't know them yet. Warmly introduce yourself as Forge, their AI training partner. Ask their name and what brings them here. Be curious and human. Gather info naturally — never ask multiple questions at once.`
     : `
 FORGE USER PROFILE (your living memory of this person):
 Name: ${profile.name ?? 'unknown'}
@@ -58,7 +89,7 @@ Calorie goal: ${profile.dailyCalorieGoal ?? 'not set'} kcal
 Protein goal: ${profile.dailyProteinGoal ?? 'not set'}g
 Preferred style: ${profile.preferredWorkoutStyle.join(', ') || 'unknown'}
 Dislikes: ${profile.dislikedExercises.join(', ') || 'none'}
-Motivation style that works: ${profile.motivationStyle ?? 'still learning'}
+Motivation style: ${profile.motivationStyle ?? 'still learning'}
 Recurring struggles: ${profile.struggles.join(', ') || 'none noted'}
 Notable wins: ${profile.wins.slice(-3).join(', ') || 'none yet'}
 Personal details: ${profile.personalDetails.join('; ') || 'none yet'}
@@ -69,26 +100,33 @@ ${nutritionContext}
 
 USE THIS PROFILE. Use their name. Reference past struggles and wins. Don't ask what you already know. Feel continuous.`.trim();
 
-  return `You are Forge, an elite AI personal trainer and nutrition coach. You build real ongoing relationships with users.
+  return `You are Forge, an elite AI personal trainer and nutrition coach with full access to the user's app.
 
 ${profileBlock}
 
-PERSONALITY: Direct and real. Motivating without being fake. You remember everything. You push when needed, back off when needed. Reference things they have told you. Notice patterns. Grow with them.
+TOOLS — USE THEM PROACTIVELY:
+You have tools to read and write real data in the app. Don't just talk about it — do it.
+- When a user mentions what they ate → call log_meal immediately, don't ask permission
+- When a user says they finished a workout → call log_workout immediately
+- When you need their current stats before giving advice → call get_health_summary or get_nutrition_today
+- When you agree on new goals → call update_nutrition_goals or update_profile to make it official
+- After logging something, confirm it naturally ("Done — logged your chicken and rice")
+
+PERSONALITY: Direct and real. Motivating without being fake. You remember everything. You push when needed, back off when needed. Reference things they've told you. Notice patterns. Grow with them.
 
 STYLE:
 - Short punchy paragraphs for mobile reading
 - Use their name occasionally, not every message
-- Reference health data naturally ("You are sitting at 4,200 steps, let us change that")
+- Reference health data naturally ("You're at 4,200 steps — let's change that")
 - Celebrate wins genuinely
-- When suggesting workouts: include sets x reps with rest times
+- When suggesting workouts: include sets × reps with rest times
 - When suggesting meals: include rough macros (P/C/F grams)
-- When calorie context is available, factor it into nutrition advice
 - Acknowledge personal things they share before pivoting to fitness
 
 INFO GATHERING: Weave missing questions in naturally. One at a time. Never interrogate.`;
 }
 
-// ─── Memory extraction ─────────────────────────────────────────────────────────
+// ─── Memory extraction ────────────────────────────────────────────────────────
 
 const EXTRACTION_SYSTEM = `You are a memory extraction system for Forge, an AI fitness coach. Extract ALL new information from the conversation and return ONLY a valid JSON object with fields to UPDATE.
 
@@ -139,14 +177,14 @@ export async function extractMemoryUpdate(
     wins: currentProfile.wins,
   });
 
-  const raw = await callClaude(
+  const response = await callClaude(
     [{ role: 'user', content: `Current profile summary:\n${profileJson}\n\nConversation:\n${convo}` }],
     EXTRACTION_SYSTEM,
     800
   );
 
   try {
-    // Slice from first { to last } to handle any surrounding prose or code fences
+    const raw = response.text;
     const firstBrace = raw.indexOf('{');
     const lastBrace = raw.lastIndexOf('}');
     if (firstBrace === -1 || lastBrace === -1) return {};
@@ -156,7 +194,7 @@ export async function extractMemoryUpdate(
   }
 }
 
-// ─── Nutrition parsing ─────────────────────────────────────────────────────────
+// ─── Nutrition parsing ────────────────────────────────────────────────────────
 
 const NUTRITION_PARSE_SYSTEM = `You are a nutrition data assistant. Parse the user's food description and return ONLY a JSON object with these fields:
 {
@@ -174,12 +212,33 @@ export async function parseNaturalLanguageFood(description: string): Promise<{
   name: string; calories: number; protein: number; carbs: number; fat: number;
   servingSize: number; servingUnit: string;
 } | null> {
+  // 1. Try real nutrition database first (USDA / Nutritionix)
   try {
-    const raw = await callClaude(
+    const results = await parseFood(description);
+    if (results.length > 0) {
+      const best = results[0];
+      return {
+        name:        best.name,
+        calories:    best.calories,
+        protein:     best.protein,
+        carbs:       best.carbs,
+        fat:         best.fat,
+        servingSize: best.servingSize,
+        servingUnit: best.servingUnit,
+      };
+    }
+  } catch {
+    // database unavailable — fall through to AI estimate
+  }
+
+  // 2. Fall back to Claude estimate when database returns nothing
+  try {
+    const response = await callClaude(
       [{ role: 'user', content: description }],
       NUTRITION_PARSE_SYSTEM,
       300
     );
+    const raw = response.text;
     const firstBrace = raw.indexOf('{');
     const lastBrace = raw.lastIndexOf('}');
     if (firstBrace === -1 || lastBrace === -1) return null;
@@ -188,5 +247,3 @@ export async function parseNaturalLanguageFood(description: string): Promise<{
     return null;
   }
 }
-
-export { callClaude };
