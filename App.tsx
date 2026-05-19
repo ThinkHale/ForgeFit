@@ -7,10 +7,13 @@ import { authService } from './src/services/supabase';
 import { useStore } from './src/store';
 
 export default function App() {
-  const { setUser, loadProfile } = useStore();
+  const { setUser, loadProfile, loadNutritionToday } = useStore();
 
   useEffect(() => {
-    // Listen for auth state changes
+    // Listen for auth state changes.
+    // Only reload profile on SIGNED_IN — not on TOKEN_REFRESHED, which fires whenever
+    // the app returns from background (e.g. after a HealthKit permission dialog) and
+    // would race with an in-progress saveProfile call, resetting sessionCount to 0.
     const { data: { subscription } } = authService.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setUser({
@@ -19,7 +22,10 @@ export default function App() {
           name: session.user.user_metadata?.name ?? '',
           createdAt: session.user.created_at,
         });
-        await loadProfile();
+        if (event === 'SIGNED_IN') {
+          await loadProfile();
+          loadNutritionToday();
+        }
       } else {
         setUser(null);
       }
@@ -35,6 +41,7 @@ export default function App() {
           createdAt: session.user.created_at,
         });
         await loadProfile();
+        loadNutritionToday();
       } else {
         setUser(null);
       }

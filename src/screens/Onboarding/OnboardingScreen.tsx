@@ -101,10 +101,9 @@ export default function OnboardingScreen({ navigation }: { navigation: any }) {
       primaryGoal: goal as any,
       fitnessLevel: level as any,
       availableDays: days,
+      sessionCount: 1,
     });
-    // Initialize watch
-    await watchService.initialize();
-    navigation.replace('Main');
+    watchService.initialize();
   }
 
   function next() {

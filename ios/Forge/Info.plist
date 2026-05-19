@@ -70,5 +70,11 @@
 	<string>Automatic</string>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Forge reads your health data to personalize your workouts and nutrition.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Forge writes workout and nutrition data to Apple Health.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Forge uses motion data to detect your activity level.</string>
 </dict>
 </plist>

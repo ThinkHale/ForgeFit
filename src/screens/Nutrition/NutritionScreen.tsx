@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Alert, ActivityIndicator,
+  TextInput, Alert, ActivityIndicator, Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -143,9 +143,77 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
 }
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
+function GoalSettingsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const { profile, saveProfile } = useStore();
+  const [calories, setCalories] = useState(String(profile?.dailyCalorieGoal ?? 2000));
+  const [protein, setProtein] = useState(String(profile?.dailyProteinGoal ?? 150));
+  const [carbs, setCarbs] = useState(String(profile?.dailyCarbGoal ?? 200));
+  const [fat, setFat] = useState(String(profile?.dailyFatGoal ?? 65));
+  const [saving, setSaving] = useState(false);
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await saveProfile({
+        dailyCalorieGoal: parseInt(calories) || 2000,
+        dailyProteinGoal: parseInt(protein) || 150,
+        dailyCarbGoal:    parseInt(carbs) || 200,
+        dailyFatGoal:     parseInt(fat) || 65,
+      });
+      onClose();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={goalModal.overlay}>
+        <TouchableOpacity style={goalModal.backdrop} onPress={onClose} />
+        <View style={goalModal.sheet}>
+          <View style={goalModal.handle} />
+          <Text style={goalModal.title}>Daily Goals</Text>
+          {[
+            { label: 'Calories (kcal)', val: calories, set: setCalories },
+            { label: 'Protein (g)',     val: protein,  set: setProtein },
+            { label: 'Carbs (g)',       val: carbs,    set: setCarbs },
+            { label: 'Fat (g)',         val: fat,      set: setFat },
+          ].map(f => (
+            <View key={f.label} style={goalModal.field}>
+              <Text style={goalModal.label}>{f.label}</Text>
+              <TextInput
+                style={goalModal.input}
+                value={f.val}
+                onChangeText={f.set}
+                keyboardType="number-pad"
+                selectTextOnFocus
+              />
+            </View>
+          ))}
+          <TouchableOpacity onPress={handleSave} disabled={saving} style={goalModal.btn} activeOpacity={0.85}>
+            <LinearGradient
+              colors={colors.gradients.brand as [string, string]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={goalModal.btnGradient}
+            >
+              <Text style={goalModal.btnText}>{saving ? 'Saving…' : 'Save Goals'}</Text>
+            </LinearGradient>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onClose} style={goalModal.cancel}>
+            <Text style={goalModal.cancelText}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export default function NutritionScreen() {
-  const { nutritionToday, profile, addMealEntry, removeMealEntry } = useStore();
+  const { nutritionToday, profile, addMealEntry, removeMealEntry, loadNutritionToday } = useStore();
   const [activeMeal, setActiveMeal] = useState<MealType | null>(null);
+  const [showGoals, setShowGoals] = useState(false);
+
+  useEffect(() => { loadNutritionToday(); }, []);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -154,24 +222,27 @@ export default function NutritionScreen() {
   }
 
   async function handleAddEntry(entry: Omit<MealEntry, 'id' | 'userId' | 'date' | 'loggedAt'>) {
-    const full: MealEntry = {
-      ...entry,
-      id: Date.now().toString(),
-      userId: '',
-      date: today,
-      loggedAt: new Date().toISOString(),
-    };
-    await addMealEntry(full);
-    // Sync to Apple Health
     try {
-      await healthService.logNutrition({
-        calories: full.foodItem.calories * full.servings,
-        protein:  full.foodItem.protein  * full.servings,
-        carbs:    full.foodItem.carbs    * full.servings,
-        fat:      full.foodItem.fat      * full.servings,
-      });
-    } catch {}
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const full: MealEntry = {
+        ...entry,
+        id: Date.now().toString(),
+        userId: '',
+        date: today,
+        loggedAt: new Date().toISOString(),
+      };
+      await addMealEntry(full);
+      try {
+        await healthService.logNutrition({
+          calories: full.foodItem.calories * full.servings,
+          protein:  full.foodItem.protein  * full.servings,
+          carbs:    full.foodItem.carbs    * full.servings,
+          fat:      full.foodItem.fat      * full.servings,
+        });
+      } catch {}
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert('Error', 'Could not save food entry. Check your connection and try again.');
+    }
   }
 
   const cals = nutritionToday?.totalCalories ?? 0;
@@ -182,8 +253,15 @@ export default function NutritionScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Header */}
-        <Text style={styles.title}>Nutrition</Text>
-        <Text style={styles.subtitle}>{format(new Date(), 'EEEE, MMMM d')}</Text>
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.title}>Nutrition</Text>
+            <Text style={styles.subtitle}>{format(new Date(), 'EEEE, MMMM d')}</Text>
+          </View>
+          <TouchableOpacity onPress={() => setShowGoals(true)} style={styles.settingsBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Text style={{ fontSize: 22 }}>⚙️</Text>
+          </TouchableOpacity>
+        </View>
 
         {/* Calorie ring summary */}
         <View style={[styles.summaryCard, shadows.md]}>
@@ -303,6 +381,8 @@ export default function NutritionScreen() {
           />
         </View>
       )}
+
+      <GoalSettingsModal visible={showGoals} onClose={() => setShowGoals(false)} />
     </SafeAreaView>
   );
 }
@@ -310,8 +390,10 @@ export default function NutritionScreen() {
 const styles = StyleSheet.create({
   container:    { flex: 1, backgroundColor: colors.background.secondary },
   scroll:       { padding: spacing.md },
-  title:        { ...typography.h1, color: colors.text.primary, marginTop: spacing.sm },
+  header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: spacing.sm },
+  title:        { ...typography.h1, color: colors.text.primary },
   subtitle:     { ...typography.small, color: colors.text.secondary, marginBottom: spacing.md },
+  settingsBtn:  { padding: spacing.xs, marginTop: spacing.xs },
   summaryCard:  { borderRadius: radius.xl, overflow: 'hidden', marginBottom: spacing.md },
   summaryGradient: { padding: spacing.lg },
   summaryCenter: { alignItems: 'center', marginBottom: spacing.lg },
@@ -373,4 +455,20 @@ const logStyles = StyleSheet.create({
   addBtnText:   { ...typography.h4, color: '#fff' },
   cancelBtn:    { padding: spacing.md, alignItems: 'center', marginTop: spacing.xs },
   cancelText:   { ...typography.bodyMed, color: colors.text.secondary },
+});
+
+const goalModal = StyleSheet.create({
+  overlay:     { flex: 1, justifyContent: 'flex-end' },
+  backdrop:    { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' },
+  sheet:       { backgroundColor: colors.background.primary, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, padding: spacing.lg, paddingBottom: 40 },
+  handle:      { width: 36, height: 4, backgroundColor: colors.border.medium, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.md },
+  title:       { ...typography.h3, color: colors.text.primary, marginBottom: spacing.md },
+  field:       { marginBottom: spacing.sm },
+  label:       { ...typography.smallMed, color: colors.text.secondary, marginBottom: spacing.xs },
+  input:       { backgroundColor: colors.background.secondary, borderRadius: radius.md, padding: spacing.md, ...typography.body, color: colors.text.primary },
+  btn:         { borderRadius: radius.lg, overflow: 'hidden', marginTop: spacing.md },
+  btnGradient: { padding: spacing.md, alignItems: 'center' },
+  btnText:     { ...typography.h4, color: '#fff' },
+  cancel:      { padding: spacing.md, alignItems: 'center' },
+  cancelText:  { ...typography.bodyMed, color: colors.text.secondary },
 });

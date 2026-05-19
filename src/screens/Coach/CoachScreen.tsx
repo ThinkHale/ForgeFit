@@ -58,11 +58,16 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   );
 }
 
-export default function CoachScreen() {
+export default function CoachScreen({ route }: { route?: any }) {
   const { profile, chatMessages, isChatLoading, addChatMessage, setChatLoading, runMemoryExtraction, healthToday, nutritionToday } = useStore();
   const [input, setInput] = useState('');
   const scrollRef = useRef<ScrollView>(null);
   const userTurnCount = chatMessages.filter(m => m.role === 'user').length;
+
+  useEffect(() => {
+    const msg = route?.params?.initialMessage;
+    if (msg) setInput(msg);
+  }, [route?.params?.initialMessage]);
 
   // Initial greeting
   useEffect(() => {

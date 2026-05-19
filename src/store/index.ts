@@ -3,6 +3,74 @@ import { User, UserProfile, ChatMessage, HealthSnapshot, DailyNutrition, MealEnt
 import { supabase } from '../services/supabase';
 import { extractMemoryUpdate } from '../services/coach';
 
+// ─── DB serialization (camelCase ↔ snake_case) ───────────────────────────────
+// The Supabase schema uses snake_case; TypeScript uses camelCase.
+
+function profileToDb(p: Partial<UserProfile>): Record<string, unknown> {
+  return {
+    name:                   p.name,
+    age:                    p.age,
+    fitness_level:          p.fitnessLevel,
+    primary_goal:           p.primaryGoal,
+    secondary_goals:        p.secondaryGoals,
+    equipment:              p.equipment,
+    available_days:         p.availableDays,
+    session_length_min:     p.sessionLengthMin,
+    injuries:               p.injuries,
+    limitations:            p.limitations,
+    dietary_restrictions:   p.dietaryRestrictions,
+    preferred_workout_style:p.preferredWorkoutStyle,
+    disliked_exercises:     p.dislikedExercises,
+    favorite_foods:         p.favoriteFoods,
+    motivation_style:       p.motivationStyle,
+    struggles:              p.struggles,
+    wins:                   p.wins,
+    personal_details:       p.personalDetails,
+    coach_notes:            p.coachNotes,
+    last_session_summary:   p.lastSessionSummary,
+    session_count:          p.sessionCount,
+    relationship_stage:     p.relationshipStage,
+    daily_calorie_goal:     p.dailyCalorieGoal,
+    daily_protein_goal:     p.dailyProteinGoal,
+    daily_carb_goal:        p.dailyCarbGoal,
+    daily_fat_goal:         p.dailyFatGoal,
+    updated_at:             p.updatedAt,
+  };
+}
+
+function profileFromDb(row: Record<string, unknown>, userId: string): UserProfile {
+  return {
+    userId,
+    name:                   (row.name as string | null) ?? null,
+    age:                    (row.age as number | null) ?? null,
+    fitnessLevel:           (row.fitness_level as UserProfile['fitnessLevel']) ?? null,
+    primaryGoal:            (row.primary_goal as UserProfile['primaryGoal']) ?? null,
+    secondaryGoals:         (row.secondary_goals as string[]) ?? [],
+    equipment:              (row.equipment as string[]) ?? [],
+    availableDays:          (row.available_days as number | null) ?? null,
+    sessionLengthMin:       (row.session_length_min as number | null) ?? null,
+    injuries:               (row.injuries as string[]) ?? [],
+    limitations:            (row.limitations as string[]) ?? [],
+    dietaryRestrictions:    (row.dietary_restrictions as string[]) ?? [],
+    preferredWorkoutStyle:  (row.preferred_workout_style as string[]) ?? [],
+    dislikedExercises:      (row.disliked_exercises as string[]) ?? [],
+    favoriteFoods:          (row.favorite_foods as string[]) ?? [],
+    motivationStyle:        (row.motivation_style as UserProfile['motivationStyle']) ?? null,
+    struggles:              (row.struggles as string[]) ?? [],
+    wins:                   (row.wins as string[]) ?? [],
+    personalDetails:        (row.personal_details as string[]) ?? [],
+    coachNotes:             (row.coach_notes as string[]) ?? [],
+    lastSessionSummary:     (row.last_session_summary as string | null) ?? null,
+    sessionCount:           (row.session_count as number) ?? 0,
+    relationshipStage:      (row.relationship_stage as UserProfile['relationshipStage']) ?? 'new',
+    dailyCalorieGoal:       (row.daily_calorie_goal as number | null) ?? null,
+    dailyProteinGoal:       (row.daily_protein_goal as number | null) ?? null,
+    dailyCarbGoal:          (row.daily_carb_goal as number | null) ?? null,
+    dailyFatGoal:           (row.daily_fat_goal as number | null) ?? null,
+    updatedAt:              (row.updated_at as string | null) ?? null,
+  };
+}
+
 const EMPTY_PROFILE: Omit<UserProfile, 'userId'> = {
   name: null, age: null, fitnessLevel: null, primaryGoal: null,
   secondaryGoals: [], equipment: [], availableDays: null, sessionLengthMin: null,
@@ -75,12 +143,21 @@ export const useStore = create<AppState>((set, get) => ({
         .single();
       if (error && error.code !== 'PGRST116') throw error;
       if (data) {
-        set({ profile: { ...EMPTY_PROFILE, ...data, userId: user.id } });
+        set({ profile: profileFromDb(data as Record<string, unknown>, user.id) });
       } else {
-        // Create new profile
         const newProfile: UserProfile = { ...EMPTY_PROFILE, userId: user.id };
-        await supabase.from('user_profiles').insert({ user_id: user.id, ...EMPTY_PROFILE });
+        const { error: insertError } = await supabase
+          .from('user_profiles')
+          .insert({ user_id: user.id, ...profileToDb(newProfile) });
+        if (insertError) console.warn('[Profile] insert failed:', insertError);
         set({ profile: newProfile });
+      }
+    } catch (e) {
+      console.warn('[Profile] loadProfile failed:', e);
+      // Ensure profile is non-null so saveProfile can proceed
+      const { user: u } = get();
+      if (u && !get().profile) {
+        set({ profile: { ...EMPTY_PROFILE, userId: u.id } });
       }
     } finally {
       set({ isProfileLoading: false });
@@ -92,7 +169,13 @@ export const useStore = create<AppState>((set, get) => ({
     if (!user || !profile) return;
     const next = { ...profile, ...updates, updatedAt: new Date().toISOString() };
     set({ profile: next });
-    await supabase.from('user_profiles').upsert({ user_id: user.id, ...next });
+    const { error } = await supabase
+      .from('user_profiles')
+      .upsert(
+        { user_id: user.id, ...profileToDb(next) },
+        { onConflict: 'user_id' }
+      );
+    if (error) console.warn('[Profile] upsert failed:', error);
   },
 
   mergeMemoryUpdate: async (updates) => {
@@ -173,10 +256,10 @@ export const useStore = create<AppState>((set, get) => ({
 
       const totals = meals.reduce(
         (acc, entry) => ({
-          calories: acc.calories + entry.foodItem.calories * entry.servings,
-          protein:  acc.protein  + entry.foodItem.protein  * entry.servings,
-          carbs:    acc.carbs    + entry.foodItem.carbs    * entry.servings,
-          fat:      acc.fat      + entry.foodItem.fat      * entry.servings,
+          calories: acc.calories + (entry.foodItem?.calories ?? 0) * entry.servings,
+          protein:  acc.protein  + (entry.foodItem?.protein  ?? 0) * entry.servings,
+          carbs:    acc.carbs    + (entry.foodItem?.carbs    ?? 0) * entry.servings,
+          fat:      acc.fat      + (entry.foodItem?.fat      ?? 0) * entry.servings,
         }),
         { calories: 0, protein: 0, carbs: 0, fat: 0 }
       );
@@ -195,6 +278,8 @@ export const useStore = create<AppState>((set, get) => ({
           fatGoal: profile?.dailyFatGoal ?? 65,
         },
       });
+    } catch {
+      // table may not exist or network error — leave nutritionToday as-is
     } finally {
       set({ isNutritionLoading: false });
     }

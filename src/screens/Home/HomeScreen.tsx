@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Dimensions, StatusBar, RefreshControl,
+  Dimensions, StatusBar, RefreshControl, ActionSheetIOS,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
 import { healthService } from '../../services/health';
+import { authService } from '../../services/supabase';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 
 const { width } = Dimensions.get('window');
@@ -124,6 +125,18 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     setRefreshing(false);
   }
 
+  function handleProfilePress() {
+    ActionSheetIOS.showActionSheetWithOptions(
+      {
+        title: profile?.name ?? 'Profile',
+        options: ['Sign Out', 'Cancel'],
+        cancelButtonIndex: 1,
+        destructiveButtonIndex: 0,
+      },
+      (i) => { if (i === 0) authService.signOut().catch(() => {}); }
+    );
+  }
+
   const calorieProgress = nutritionToday
     ? nutritionToday.totalCalories / (nutritionToday.calorieGoal || 2000)
     : 0;
@@ -155,7 +168,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                 {now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
               </Text>
             </View>
-            <TouchableOpacity style={styles.avatarBtn}>
+            <TouchableOpacity style={styles.avatarBtn} onPress={handleProfilePress}>
               <LinearGradient
                 colors={colors.gradients.brand as [string, string]}
                 style={styles.avatar}
