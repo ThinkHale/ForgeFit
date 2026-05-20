@@ -1,15 +1,21 @@
 #!/bin/sh
-set -ex  # -x prints each command before running so failures are visible in logs
+set -ex
 
-# Initialize Homebrew (Intel: /usr/local, Apple Silicon: /opt/homebrew)
+# Suppress Homebrew auto-update (saves ~60s and avoids update errors)
+export HOMEBREW_NO_AUTO_UPDATE=1
+export HOMEBREW_NO_ENV_HINTS=1
+
+# Initialize Homebrew
 eval "$(/opt/homebrew/bin/brew shellenv 2>/dev/null || /usr/local/bin/brew shellenv)"
 
-# Install Node.js (no-op if already installed)
-brew install node || brew upgrade node || true
+# Use pre-installed Node if available; only brew-install as a fallback
+if ! command -v node >/dev/null 2>&1; then
+  brew install node
+fi
 
-# Symlink into /usr/local/bin so xcodebuild phase scripts can find node/npm
-sudo ln -sf "$(brew --prefix)/bin/node" /usr/local/bin/node
-sudo ln -sf "$(brew --prefix)/bin/npm" /usr/local/bin/npm
+# Symlink so xcodebuild phase scripts (restricted PATH) can find node/npm
+sudo ln -sf "$(command -v node)" /usr/local/bin/node
+sudo ln -sf "$(command -v npm)" /usr/local/bin/npm
 
 node --version
 npm --version
