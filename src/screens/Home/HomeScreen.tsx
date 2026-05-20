@@ -1,53 +1,46 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Dimensions, StatusBar, RefreshControl, ActionSheetIOS,
+  Dimensions, StatusBar, RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle } from 'react-native-svg';
 import { useStore } from '../../store';
 import { healthService } from '../../services/health';
-import { authService } from '../../services/supabase';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 
 const { width } = Dimensions.get('window');
 
-// ─── Ring component (Activity rings style) ────────────────────────────────────
+// ─── Ring component ────────────────────────────────────────────────────────────
 function ActivityRing({
   progress, size = 64, strokeWidth = 7,
-  color = colors.brand.primary, trackColor = 'rgba(0,0,0,0.06)',
+  color = colors.brand.primary, trackColor = 'rgba(255,255,255,0.25)',
 }: {
   progress: number; size?: number; strokeWidth?: number;
   color?: string; trackColor?: string;
 }) {
   const r = (size - strokeWidth) / 2;
   const circ = 2 * Math.PI * r;
-  const dash = circ * Math.min(progress, 1);
+  const filled = circ * Math.min(Math.max(progress, 0), 1);
+  const cx = size / 2;
+  const cy = size / 2;
+
   return (
-    <View style={{ width: size, height: size }}>
-      {/* SVG would be used in real app; using View approximation here */}
-      <View style={{
-        width: size, height: size, borderRadius: size / 2,
-        borderWidth: strokeWidth, borderColor: trackColor,
-        position: 'absolute',
-      }} />
-      <View style={{
-        width: size, height: size, borderRadius: size / 2,
-        borderWidth: strokeWidth, borderColor: color,
-        position: 'absolute',
-        opacity: Math.min(progress, 1),
-        transform: [{ rotate: `${progress * 360}deg` }],
-      }} />
-      <View style={{
-        position: 'absolute', inset: 0,
-        alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Text style={{ fontSize: 14, fontWeight: '700', color }}>
-          {Math.round(progress * 100)}%
-        </Text>
-      </View>
-    </View>
+    <Svg width={size} height={size}>
+      <Circle cx={cx} cy={cy} r={r} stroke={trackColor} strokeWidth={strokeWidth} fill="none" />
+      {progress > 0 && (
+        <Circle
+          cx={cx} cy={cy} r={r}
+          stroke={color}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeDasharray={`${filled} ${circ}`}
+          strokeLinecap="round"
+          transform={`rotate(-90, ${cx}, ${cy})`}
+        />
+      )}
+    </Svg>
   );
 }
 
@@ -105,6 +98,7 @@ function QuickAction({ icon, label, onPress, accent }: {
 export default function HomeScreen({ navigation }: { navigation: any }) {
   const { profile, healthToday, nutritionToday, setHealthToday } = useStore();
   const [refreshing, setRefreshing] = useState(false);
+  const [healthConnected, setHealthConnected] = useState(healthService.isConnected);
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
@@ -114,6 +108,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
     try {
       const snapshot = await healthService.getTodaySnapshot();
       setHealthToday(snapshot);
+      setHealthConnected(healthService.isConnected);
     } catch {}
   }
 
@@ -126,22 +121,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
   }
 
   function handleProfilePress() {
-    ActionSheetIOS.showActionSheetWithOptions(
-      {
-        title: profile?.name ?? 'Profile',
-        options: ['Connect Apple Health', 'Sign Out', 'Cancel'],
-        cancelButtonIndex: 2,
-        destructiveButtonIndex: 1,
-      },
-      async (i) => {
-        if (i === 0) {
-          const granted = await healthService.initialize();
-          if (granted) loadHealthData();
-        } else if (i === 1) {
-          authService.signOut().catch(() => {});
-        }
-      }
-    );
+    navigation.navigate('Settings');
   }
 
   const calorieProgress = nutritionToday
@@ -209,6 +189,26 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
                   <Text style={{ fontSize: 32 }}>→</Text>
                 </View>
               </LinearGradient>
+            </TouchableOpacity>
+          )}
+
+          {/* Health connection nudge */}
+          {!healthConnected && (
+            <TouchableOpacity
+              onPress={async () => {
+                const granted = await healthService.initialize();
+                setHealthConnected(granted);
+                if (granted) loadHealthData();
+              }}
+              activeOpacity={0.85}
+              style={[styles.healthNudge, shadows.sm]}
+            >
+              <Text style={styles.healthNudgeIcon}>❤️</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.healthNudgeTitle}>Connect Apple Health</Text>
+                <Text style={styles.healthNudgeSub}>Tap to sync steps, heart rate & sleep</Text>
+              </View>
+              <Text style={{ color: colors.brand.primary, fontSize: 18 }}>›</Text>
             </TouchableOpacity>
           )}
 
@@ -372,6 +372,10 @@ const styles = StyleSheet.create({
   statValue:        { ...typography.h2, color: '#fff', marginTop: spacing.xs },
   statUnit:         { ...typography.small, color: 'rgba(255,255,255,0.8)' },
   statLabel:        { ...typography.caption, color: 'rgba(255,255,255,0.7)', marginTop: 2 },
+  healthNudge:      { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.glass.brand, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.sm, borderWidth: 1, borderColor: colors.border.brand },
+  healthNudgeIcon:  { fontSize: 22 },
+  healthNudgeTitle: { ...typography.smallMed, color: colors.brand.primary },
+  healthNudgeSub:   { ...typography.caption, color: colors.text.secondary, marginTop: 2 },
   welcomeCard:      { borderRadius: radius.xl, overflow: 'hidden', marginTop: spacing.sm },
   welcomeGradient:  { padding: spacing.md },
   welcomeContent:   { flexDirection: 'row', alignItems: 'center', gap: spacing.md },

@@ -36,11 +36,12 @@ function LogWorkoutModal({ visible, onClose }: { visible: boolean; onClose: () =
     try {
       const end = new Date();
       const start = new Date(end.getTime() - mins * 60 * 1000);
+      // ~8 cal/min is a reasonable average across strength and cardio
       await healthService.logWorkout({
         type: name,
         startDate: start.toISOString(),
         endDate: end.toISOString(),
-        calories: Math.round(mins * 6),
+        calories: Math.round(mins * 8),
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Logged!', `${name} saved to Apple Health.`);
@@ -100,7 +101,7 @@ function LogWorkoutModal({ visible, onClose }: { visible: boolean; onClose: () =
 }
 
 export default function WorkoutsScreen({ navigation }: { navigation: any }) {
-  const { profile } = useStore();
+  const { profile, activeWorkout } = useStore();
   const [showLog, setShowLog] = useState(false);
 
   const focus = GOAL_FOCUS[profile?.primaryGoal ?? 'general_fitness'] ?? GOAL_FOCUS.general_fitness;
@@ -116,6 +117,32 @@ export default function WorkoutsScreen({ navigation }: { navigation: any }) {
     <SafeAreaView style={s.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={s.scroll}>
         <Text style={s.title}>Workouts</Text>
+
+        {/* Active workout banner */}
+        {activeWorkout && (
+          <TouchableOpacity
+            onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); navigation.navigate('WorkoutActive'); }}
+            activeOpacity={0.88}
+            style={[s.activeCard, shadows.brand]}
+          >
+            <LinearGradient
+              colors={['#1C1C1E', '#2C2C2E'] as [string, string]}
+              style={s.activeGradient}
+            >
+              <View style={s.activeRow}>
+                <View style={s.activePulse} />
+                <View style={{ flex: 1 }}>
+                  <Text style={s.activeEyebrow}>IN PROGRESS</Text>
+                  <Text style={s.activeName}>{activeWorkout.name}</Text>
+                  <Text style={s.activeSub}>
+                    {activeWorkout.exercises.length} exercises · tap to resume
+                  </Text>
+                </View>
+                <Text style={s.activeArrow}>→</Text>
+              </View>
+            </LinearGradient>
+          </TouchableOpacity>
+        )}
 
         {/* Today's focus card */}
         <TouchableOpacity
@@ -206,6 +233,15 @@ const s = StyleSheet.create({
   scroll:       { padding: spacing.md },
   title:        { ...typography.h1, color: colors.text.primary, marginTop: spacing.sm, marginBottom: spacing.md },
   sectionTitle: { ...typography.captionMed, color: colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 0.8, marginTop: spacing.lg, marginBottom: spacing.sm },
+
+  activeCard:     { borderRadius: radius.xl, overflow: 'hidden', marginBottom: spacing.md },
+  activeGradient: { padding: spacing.md },
+  activeRow:      { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  activePulse:    { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.success },
+  activeEyebrow:  { ...typography.label, color: colors.success, letterSpacing: 1, marginBottom: 2 },
+  activeName:     { ...typography.h4, color: '#fff' },
+  activeSub:      { ...typography.caption, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
+  activeArrow:    { fontSize: 22, color: '#fff' },
 
   focusCard:     { borderRadius: radius.xl, overflow: 'hidden', marginBottom: spacing.sm },
   focusGradient: { padding: spacing.lg },

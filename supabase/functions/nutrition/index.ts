@@ -94,6 +94,56 @@ async function parseNutritionix(query: string): Promise<NutritionResult[]> {
   }));
 }
 
+// ─── Nutritionix barcode lookup ───────────────────────────────────────────────
+
+async function lookupBarcodeNutritionix(upc: string): Promise<NutritionResult[]> {
+  if (!NUTRITIONIX_APP_ID || !NUTRITIONIX_APP_KEY) return [];
+  const res = await fetch(`https://trackapi.nutritionix.com/v2/search/item?upc=${encodeURIComponent(upc)}`, {
+    headers: { 'x-app-id': NUTRITIONIX_APP_ID, 'x-app-key': NUTRITIONIX_APP_KEY },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.foods ?? []).map((food: Record<string, unknown>) => ({
+    name:        food.food_name as string,
+    brand:       (food.nix_brand_name as string | undefined) ?? undefined,
+    calories:    Math.round((food.nf_calories as number) ?? 0),
+    protein:     Math.round(((food.nf_protein as number) ?? 0) * 10) / 10,
+    carbs:       Math.round(((food.nf_total_carbohydrate as number) ?? 0) * 10) / 10,
+    fat:         Math.round(((food.nf_total_fat as number) ?? 0) * 10) / 10,
+    servingSize: (food.serving_qty as number) ?? 1,
+    servingUnit: (food.serving_unit as string) ?? 'serving',
+    source:      'nutritionix' as const,
+  }));
+}
+
+async function lookupBarcodeUSDA(upc: string): Promise<NutritionResult[]> {
+  if (!USDA_API_KEY) return [];
+  const url = new URL('https://api.nal.usda.gov/fdc/v1/foods/search');
+  url.searchParams.set('query', upc);
+  url.searchParams.set('api_key', USDA_API_KEY);
+  url.searchParams.set('pageSize', '3');
+  url.searchParams.set('dataType', 'Branded');
+  const res = await fetch(url.toString());
+  if (!res.ok) return [];
+  const data = await res.json();
+  return (data.foods ?? []).slice(0, 3).map((food: Record<string, unknown>) => {
+    const nutrients = (food.foodNutrients as Array<Record<string, unknown>>) ?? [];
+    const get = (id: number) => (nutrients.find(n => n.nutrientId === id)?.value as number) ?? 0;
+    return {
+      name:        food.description as string,
+      brand:       (food.brandOwner as string | undefined) ?? (food.brandName as string | undefined),
+      calories:    Math.round(get(1008)),
+      protein:     Math.round(get(1003) * 10) / 10,
+      carbs:       Math.round(get(1005) * 10) / 10,
+      fat:         Math.round(get(1004) * 10) / 10,
+      servingSize: (food.servingSize as number) ?? 100,
+      servingUnit: (food.servingUnit as string) ?? 'g',
+      source:      'usda' as const,
+      fdcId:       food.fdcId as number,
+    };
+  });
+}
+
 // ─── Router ────────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -112,7 +162,10 @@ serve(async (req) => {
 
     let results: NutritionResult[] = [];
 
-    if (mode === 'parse') {
+    if (mode === 'barcode') {
+      results = await lookupBarcodeNutritionix(query);
+      if (results.length === 0) results = await lookupBarcodeUSDA(query);
+    } else if (mode === 'parse') {
       // Natural language: Nutritionix preferred (understands "2 scrambled eggs"),
       // falls back to USDA keyword search when Nutritionix isn't configured yet.
       results = await parseNutritionix(query);

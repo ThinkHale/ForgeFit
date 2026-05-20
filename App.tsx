@@ -4,10 +4,20 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import AppNavigator from './src/navigation';
 import { authService } from './src/services/supabase';
+import { healthService } from './src/services/health';
+import { notificationService } from './src/services/notifications';
 import { useStore } from './src/store';
 
 export default function App() {
   const { setUser, loadProfile, loadNutritionToday } = useStore();
+
+  useEffect(() => {
+    healthService.autoInitialize();
+    // Re-schedule reminders silently if permission was already granted
+    notificationService.areNotificationsEnabled().then(enabled => {
+      if (enabled) notificationService.scheduleDefaultReminders();
+    });
+  }, []);
 
   useEffect(() => {
     // Listen for auth state changes.

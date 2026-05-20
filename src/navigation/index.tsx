@@ -7,6 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, typography } from '../theme';
 import { useStore } from '../store';
+import { navigationRef } from './NavigationRef';
 
 import AuthScreen from '../screens/Auth/AuthScreen';
 import OnboardingScreen from '../screens/Onboarding/OnboardingScreen';
@@ -14,7 +15,9 @@ import HomeScreen from '../screens/Home/HomeScreen';
 import CoachScreen from '../screens/Coach/CoachScreen';
 import NutritionScreen from '../screens/Nutrition/NutritionScreen';
 import WorkoutsScreen from '../screens/Workouts/WorkoutsScreen';
+import WorkoutActiveScreen from '../screens/Workouts/WorkoutActiveScreen';
 import ProgressScreen from '../screens/Progress/ProgressScreen';
+import SettingsScreen from '../screens/Settings/SettingsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -81,14 +84,18 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false, animation: 'fade' }}>
+    <NavigationContainer ref={navigationRef}>
+      <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!user ? (
-          <Stack.Screen name="Auth"       component={AuthScreen} />
+          <Stack.Screen name="Auth"          component={AuthScreen} options={{ animation: 'fade' }} />
         ) : isNew ? (
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          <Stack.Screen name="Onboarding"    component={OnboardingScreen} options={{ animation: 'fade' }} />
         ) : (
-          <Stack.Screen name="Main"       component={MainTabs} />
+          <>
+            <Stack.Screen name="Main"          component={MainTabs} options={{ animation: 'fade' }} />
+            <Stack.Screen name="Settings"      component={SettingsScreen} options={{ animation: 'slide_from_right' }} />
+            <Stack.Screen name="WorkoutActive" component={WorkoutActiveScreen} options={{ animation: 'slide_from_bottom', presentation: 'fullScreenModal' }} />
+          </>
         )}
       </Stack.Navigator>
     </NavigationContainer>

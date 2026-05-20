@@ -26,6 +26,19 @@ export async function searchFood(query: string): Promise<NutritionResult[]> {
   return (data?.results as NutritionResult[]) ?? [];
 }
 
+/** Barcode/UPC lookup — returns the specific product matching that barcode. */
+export async function lookupBarcode(upc: string): Promise<NutritionResult[]> {
+  if (!upc.trim()) return [];
+  const { data, error } = await supabase.functions.invoke('nutrition', {
+    body: { query: upc, mode: 'barcode' },
+  });
+  if (error || data?.error) {
+    console.warn('[Nutrition] lookupBarcode failed:', error ?? data?.error);
+    return [];
+  }
+  return (data?.results as NutritionResult[]) ?? [];
+}
+
 /** Natural language parse — good for descriptions, e.g. "2 scrambled eggs with cheese"
  *  Uses Nutritionix when available, falls back to USDA keyword search. */
 export async function parseFood(description: string): Promise<NutritionResult[]> {

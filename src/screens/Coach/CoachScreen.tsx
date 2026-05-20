@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, ScrollView, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator,
+  StyleSheet, KeyboardAvoidingView, Platform, ActivityIndicator, Animated,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -11,6 +11,7 @@ import { callClaude, buildCoachSystemPrompt, ClaudeResponse } from '../../servic
 import { FORGE_TOOLS, executeTool } from '../../services/tools';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 import { ChatMessage } from '../../types';
+import { MarkdownText } from '../../components/MarkdownText';
 
 const STAGE_LABEL: Record<string, string> = {
   new: 'New', building: 'Building', established: 'Established', deep: 'Deep bond',
@@ -26,10 +27,40 @@ const QUICK_PROMPTS = [
 ];
 
 function TypingDots() {
+  const anims = useRef([
+    new Animated.Value(0),
+    new Animated.Value(0),
+    new Animated.Value(0),
+  ]).current;
+
+  useEffect(() => {
+    const loops = anims.map((anim, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(i * 140),
+          Animated.timing(anim, { toValue: 1, duration: 280, useNativeDriver: true }),
+          Animated.timing(anim, { toValue: 0, duration: 280, useNativeDriver: true }),
+          Animated.delay((2 - i) * 140),
+        ])
+      )
+    );
+    loops.forEach(l => l.start());
+    return () => loops.forEach(l => l.stop());
+  }, []);
+
   return (
     <View style={dotStyles.container}>
-      {[0, 1, 2].map(i => (
-        <View key={i} style={[dotStyles.dot, { opacity: 0.4 + i * 0.2 }]} />
+      {anims.map((anim, i) => (
+        <Animated.View
+          key={i}
+          style={[
+            dotStyles.dot,
+            {
+              opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.3, 1] }),
+              transform: [{ translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [0, -4] }) }],
+            },
+          ]}
+        />
       ))}
     </View>
   );
@@ -51,28 +82,38 @@ function MessageBubble({ message }: { message: ChatMessage }) {
         bubbleStyles.bubble,
         isUser ? bubbleStyles.bubbleUser : bubbleStyles.bubbleAssistant,
       ]}>
-        <Text style={[bubbleStyles.text, isUser && bubbleStyles.textUser]}>
-          {message.content}
-        </Text>
+        {isUser ? (
+          <Text style={[bubbleStyles.text, bubbleStyles.textUser]}>{message.content}</Text>
+        ) : (
+          <MarkdownText text={message.content} textStyle={bubbleStyles.text} />
+        )}
       </View>
     </View>
   );
 }
 
 export default function CoachScreen({ route }: { route?: any }) {
-  const { profile, chatMessages, isChatLoading, addChatMessage, setChatLoading, runMemoryExtraction, healthToday, nutritionToday } = useStore();
+  const { profile, chatMessages, isChatLoading, chatHistoryLoaded, addChatMessage, setChatLoading, clearChat, loadChatHistory, runMemoryExtraction, healthToday, nutritionToday } = useStore();
   const [input, setInput] = useState('');
   const scrollRef = useRef<ScrollView>(null);
   const hasGreetedRef = useRef(false);
+
+  // Load persisted history once on mount
+  useEffect(() => {
+    if (!chatHistoryLoaded) {
+      loadChatHistory();
+    }
+  }, []);
 
   useEffect(() => {
     const msg = route?.params?.initialMessage;
     if (msg) setInput(msg);
   }, [route?.params?.initialMessage]);
 
-  // Initial greeting — guard with ref so it only fires once even if profile updates
+  // Show greeting only after history is loaded and no messages exist
   useEffect(() => {
-    if (chatMessages.length === 0 && profile && !hasGreetedRef.current) {
+    if (!chatHistoryLoaded || !profile || hasGreetedRef.current) return;
+    if (chatMessages.length === 0) {
       hasGreetedRef.current = true;
       const greeting: ChatMessage = {
         id: Date.now().toString(),
@@ -83,8 +124,10 @@ export default function CoachScreen({ route }: { route?: any }) {
         timestamp: new Date().toISOString(),
       };
       addChatMessage(greeting);
+    } else {
+      hasGreetedRef.current = true; // history exists — skip greeting
     }
-  }, [profile]);
+  }, [chatHistoryLoaded, profile]);
 
   function buildReturnGreeting(p: typeof profile): string {
     if (!p) return 'Welcome back.';

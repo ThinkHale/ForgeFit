@@ -1,7 +1,8 @@
 import { create } from 'zustand';
-import { User, UserProfile, ChatMessage, HealthSnapshot, DailyNutrition, MealEntry } from '../types';
+import { User, UserProfile, ChatMessage, HealthSnapshot, DailyNutrition, MealEntry, ActiveWorkout, ActiveWorkoutExercise } from '../types';
 import { supabase } from '../services/supabase';
 import { extractMemoryUpdate } from '../services/coach';
+import { healthService } from '../services/health';
 
 // ─── DB serialization (camelCase ↔ snake_case) ───────────────────────────────
 // The Supabase schema uses snake_case; TypeScript uses camelCase.
@@ -104,9 +105,11 @@ interface AppState {
   // Coach chat
   chatMessages: ChatMessage[];
   isChatLoading: boolean;
+  chatHistoryLoaded: boolean;
   addChatMessage: (msg: ChatMessage) => void;
   setChatLoading: (v: boolean) => void;
   clearChat: () => void;
+  loadChatHistory: () => Promise<void>;
   runMemoryExtraction: () => Promise<void>;
 
   // Health data
@@ -116,9 +119,19 @@ interface AppState {
   // Nutrition
   nutritionToday: DailyNutrition | null;
   isNutritionLoading: boolean;
+  nutritionDate: string;
+  setNutritionDate: (date: string) => void;
   loadNutritionToday: () => Promise<void>;
+  loadNutritionForDate: (date: string) => Promise<void>;
   addMealEntry: (entry: MealEntry) => Promise<void>;
   removeMealEntry: (entryId: string) => Promise<void>;
+
+  // Active workout
+  activeWorkout: ActiveWorkout | null;
+  startWorkout: (name: string, exercises: Omit<ActiveWorkoutExercise, 'setResults'>[]) => void;
+  updateSetResult: (exerciseIdx: number, setIdx: number, result: { reps?: number; weight?: number }) => void;
+  finishWorkout: () => Promise<void>;
+  cancelWorkout: () => void;
 }
 
 export const useStore = create<AppState>((set, get) => ({
@@ -210,7 +223,51 @@ export const useStore = create<AppState>((set, get) => ({
   // ── Chat ──────────────────────────────────────────────────────────────────────
   chatMessages: [],
   isChatLoading: false,
-  addChatMessage: (msg) => set(s => ({ chatMessages: [...s.chatMessages, msg] })),
+  chatHistoryLoaded: false,
+
+  loadChatHistory: async () => {
+    const { user } = get();
+    if (!user) return;
+    try {
+      const { data } = await supabase
+        .from('coach_messages')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('timestamp', { ascending: true })
+        .limit(60);
+      if (data && data.length > 0) {
+        const msgs: ChatMessage[] = data.map((r: Record<string, unknown>) => ({
+          id:        r.id as string,
+          role:      r.role as 'user' | 'assistant',
+          content:   r.content as string,
+          timestamp: r.timestamp as string,
+        }));
+        set({ chatMessages: msgs, chatHistoryLoaded: true });
+      } else {
+        set({ chatHistoryLoaded: true });
+      }
+    } catch {
+      set({ chatHistoryLoaded: true });
+    }
+  },
+
+  addChatMessage: (msg) => {
+    set(s => ({ chatMessages: [...s.chatMessages, msg] }));
+    // Fire-and-forget persistence
+    const { user } = get();
+    if (user) {
+      supabase.from('coach_messages').insert({
+        id:        msg.id,
+        user_id:   user.id,
+        role:      msg.role,
+        content:   msg.content,
+        timestamp: msg.timestamp,
+      }).then(({ error }) => {
+        if (error) console.warn('[Chat] persist failed:', error.message);
+      });
+    }
+  },
+
   setChatLoading: (v) => set({ isChatLoading: v }),
   clearChat: () => set({ chatMessages: [] }),
 
@@ -236,84 +293,140 @@ export const useStore = create<AppState>((set, get) => ({
   // ── Nutrition ─────────────────────────────────────────────────────────────────
   nutritionToday: null,
   isNutritionLoading: false,
+  nutritionDate: new Date().toISOString().split('T')[0],
+
+  setNutritionDate: (date) => {
+    set({ nutritionDate: date });
+    get().loadNutritionForDate(date);
+  },
 
   loadNutritionToday: async () => {
+    const today = new Date().toISOString().split('T')[0];
+    set({ nutritionDate: today });
+    await get().loadNutritionForDate(today);
+  },
+
+  loadNutritionForDate: async (date) => {
     const { user, profile } = get();
     if (!user) return;
     set({ isNutritionLoading: true });
     try {
-      const today = new Date().toISOString().split('T')[0];
       const { data } = await supabase
         .from('meal_entries')
         .select('*')
         .eq('user_id', user.id)
-        .eq('date', today);
+        .eq('date', date);
 
       const meals: MealEntry[] = (data ?? []).map((row: Record<string, unknown>) => ({
-        id: row.id as string,
-        userId: row.user_id as string,
+        id:       row.id as string,
+        userId:   row.user_id as string,
         foodItem: row.food_item as MealEntry['foodItem'],
         mealType: row.meal_type as MealEntry['mealType'],
         servings: row.servings as number,
         loggedAt: row.logged_at as string,
-        date: row.date as string,
+        date:     row.date as string,
       }));
 
       const totals = meals.reduce(
-        (acc, entry) => ({
-          calories: acc.calories + (entry.foodItem?.calories ?? 0) * entry.servings,
-          protein:  acc.protein  + (entry.foodItem?.protein  ?? 0) * entry.servings,
-          carbs:    acc.carbs    + (entry.foodItem?.carbs    ?? 0) * entry.servings,
-          fat:      acc.fat      + (entry.foodItem?.fat      ?? 0) * entry.servings,
+        (acc, e) => ({
+          calories: acc.calories + (e.foodItem?.calories ?? 0) * e.servings,
+          protein:  acc.protein  + (e.foodItem?.protein  ?? 0) * e.servings,
+          carbs:    acc.carbs    + (e.foodItem?.carbs    ?? 0) * e.servings,
+          fat:      acc.fat      + (e.foodItem?.fat      ?? 0) * e.servings,
         }),
         { calories: 0, protein: 0, carbs: 0, fat: 0 }
       );
 
       set({
         nutritionToday: {
-          date: today,
+          date,
           totalCalories: Math.round(totals.calories),
-          totalProtein: Math.round(totals.protein),
-          totalCarbs: Math.round(totals.carbs),
-          totalFat: Math.round(totals.fat),
+          totalProtein:  Math.round(totals.protein),
+          totalCarbs:    Math.round(totals.carbs),
+          totalFat:      Math.round(totals.fat),
           meals,
           calorieGoal: profile?.dailyCalorieGoal ?? 2000,
           proteinGoal: profile?.dailyProteinGoal ?? 150,
-          carbGoal: profile?.dailyCarbGoal ?? 200,
-          fatGoal: profile?.dailyFatGoal ?? 65,
+          carbGoal:    profile?.dailyCarbGoal    ?? 200,
+          fatGoal:     profile?.dailyFatGoal     ?? 65,
         },
       });
     } catch (e) {
-      console.warn('[Nutrition] loadNutritionToday failed:', e);
+      console.warn('[Nutrition] loadNutritionForDate failed:', e);
     } finally {
       set({ isNutritionLoading: false });
     }
   },
 
   addMealEntry: async (entry) => {
-    const { user } = get();
+    const { user, nutritionDate } = get();
     if (!user) return;
-    // Omit id — the DB column is UUID type and generates its own via uuid_generate_v4().
-    // Passing a non-UUID string (e.g. Date.now()) causes a silent Postgres type error.
     const { error } = await supabase.from('meal_entries').insert({
-      user_id: user.id,
+      user_id:   user.id,
       food_item: entry.foodItem,
       meal_type: entry.mealType,
-      servings: entry.servings,
+      servings:  entry.servings,
       logged_at: entry.loggedAt,
-      date: entry.date,
+      date:      entry.date,
     });
     if (error) {
       console.warn('[Nutrition] addMealEntry failed:', error);
       throw error;
     }
-    await get().loadNutritionToday();
+    await get().loadNutritionForDate(nutritionDate);
   },
 
   removeMealEntry: async (entryId) => {
-    const { user } = get();
+    const { user, nutritionDate } = get();
     if (!user) return;
     await supabase.from('meal_entries').delete().eq('id', entryId).eq('user_id', user.id);
-    await get().loadNutritionToday();
+    await get().loadNutritionForDate(nutritionDate);
   },
+
+  // ── Active Workout ────────────────────────────────────────────────────────────
+  activeWorkout: null,
+
+  startWorkout: (name, exercises) => {
+    const workout: ActiveWorkout = {
+      id:         Date.now().toString(),
+      name,
+      startedAt:  new Date().toISOString(),
+      exercises:  exercises.map(e => ({
+        ...e,
+        setResults: Array.from({ length: e.sets }, () => ({ completed: false })),
+      })),
+    };
+    set({ activeWorkout: workout });
+  },
+
+  updateSetResult: (exerciseIdx, setIdx, result) => {
+    const { activeWorkout } = get();
+    if (!activeWorkout) return;
+    const exercises = activeWorkout.exercises.map((ex, ei) => {
+      if (ei !== exerciseIdx) return ex;
+      const setResults = ex.setResults.map((s, si) =>
+        si === setIdx ? { ...result, completed: true } : s
+      );
+      return { ...ex, setResults };
+    });
+    set({ activeWorkout: { ...activeWorkout, exercises } });
+  },
+
+  finishWorkout: async () => {
+    const { activeWorkout } = get();
+    if (!activeWorkout) return;
+    const durationMs = Date.now() - new Date(activeWorkout.startedAt).getTime();
+    const durationMin = Math.round(durationMs / 60000);
+    try {
+      await healthService.logWorkout({
+        type:      activeWorkout.name,
+        startDate: activeWorkout.startedAt,
+        endDate:   new Date().toISOString(),
+        calories:  Math.round(durationMin * 8),
+      });
+    } catch {}
+    set({ activeWorkout: null });
+  },
+
+  cancelWorkout: () => set({ activeWorkout: null }),
 }));

@@ -12,6 +12,7 @@
 
 import { useStore } from '../store';
 import { healthService } from './health';
+import { navigate } from '../navigation/NavigationRef';
 import { searchFood, parseFood } from './nutrition';
 import { MealEntry, MealType, UserProfile } from '../types';
 
@@ -107,6 +108,34 @@ export const FORGE_TOOLS = [
   },
 
   {
+    name: 'start_workout_session',
+    description:
+      "Create a structured, guided workout session the user can follow step-by-step. Use this when the user asks you to build a workout they're about to do — NOT for logging past workouts (use log_workout for that). This opens the interactive workout tracker.",
+    input_schema: {
+      type: 'object',
+      properties: {
+        workout_name: { type: 'string', description: 'e.g. "Upper Body Strength", "HIIT Cardio Blast"' },
+        exercises: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name:         { type: 'string',  description: 'Exercise name' },
+              sets:         { type: 'number',  description: 'Number of sets' },
+              reps:         { type: 'string',  description: 'e.g. "8-10", "12", "30 seconds", "max"' },
+              rest_seconds: { type: 'number',  description: 'Rest between sets in seconds (default 60)' },
+              notes:        { type: 'string',  description: 'Optional form cue or tip' },
+            },
+            required: ['name', 'sets', 'reps'],
+          },
+          description: 'Ordered list of exercises',
+        },
+      },
+      required: ['workout_name', 'exercises'],
+    },
+  },
+
+  {
     name: 'update_profile',
     description:
       "Update the user's training profile. Use this when the user confirms a change to their goal, fitness level, training schedule, or session length. Injuries, equipment, and food preferences are captured automatically — no need to update those here.",
@@ -195,7 +224,7 @@ export async function executeTool(tool: ToolUse): Promise<ToolResult> {
           type: inp.name,
           startDate: start.toISOString(),
           endDate: end.toISOString(),
-          calories: inp.calories_burned ?? Math.round(inp.duration_minutes * 6),
+          calories: inp.calories_burned ?? Math.round(inp.duration_minutes * 8),
         });
         return {
           tool_use_id: tool.id,
@@ -273,6 +302,35 @@ export async function executeTool(tool: ToolUse): Promise<ToolResult> {
         return {
           tool_use_id: tool.id,
           content: `Updated nutrition goals — ${lines.join(', ')}.`,
+        };
+      }
+
+      case 'start_workout_session': {
+        const inp = tool.input as {
+          workout_name: string;
+          exercises: Array<{
+            name: string;
+            sets: number;
+            reps: string;
+            rest_seconds?: number;
+            notes?: string;
+          }>;
+        };
+        store.startWorkout(
+          inp.workout_name,
+          inp.exercises.map(e => ({
+            name:        e.name,
+            sets:        e.sets,
+            reps:        e.reps,
+            restSeconds: e.rest_seconds ?? 60,
+            notes:       e.notes,
+          }))
+        );
+        // Navigate to the active workout screen
+        navigate('WorkoutActive');
+        return {
+          tool_use_id: tool.id,
+          content: `Workout "${inp.workout_name}" is ready with ${inp.exercises.length} exercises. Opening the workout tracker now.`,
         };
       }
 

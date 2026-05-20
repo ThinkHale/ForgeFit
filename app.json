@@ -18,7 +18,8 @@
       "infoPlist": {
         "NSHealthShareUsageDescription": "Forge reads your health data to personalize your workouts and nutrition.",
         "NSHealthUpdateUsageDescription": "Forge writes workout and nutrition data to Apple Health.",
-        "NSMotionUsageDescription": "Forge uses motion data to detect your activity level."
+        "NSMotionUsageDescription": "Forge uses motion data to detect your activity level.",
+        "NSCameraUsageDescription": "Forge uses your camera to scan food barcodes for quick nutrition logging."
       },
       "entitlements": {
         "com.apple.developer.healthkit": true,
@@ -28,6 +29,7 @@
     "plugins": [
       "expo-font",
       "expo-secure-store",
+      "expo-camera",
       [
         "expo-notifications",
         {

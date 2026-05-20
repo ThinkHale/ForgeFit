@@ -182,6 +182,24 @@ export interface WatchMessage {
   timestamp: string;
 }
 
+// ─── Active Workout ────────────────────────────────────────────────────────────
+
+export interface ActiveWorkoutExercise {
+  name: string;
+  sets: number;
+  reps: string;           // e.g. "8-10", "30 seconds", "max"
+  restSeconds: number;
+  notes?: string;
+  setResults: Array<{ reps?: number; weight?: number; completed: boolean }>;
+}
+
+export interface ActiveWorkout {
+  id: string;
+  name: string;
+  exercises: ActiveWorkoutExercise[];
+  startedAt: string;
+}
+
 // ─── AI Coach ─────────────────────────────────────────────────────────────────
 
 export interface ChatMessage {

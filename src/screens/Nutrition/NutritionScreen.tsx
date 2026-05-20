@@ -4,10 +4,12 @@ import {
   TextInput, Alert, ActivityIndicator, Modal,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Svg, { Circle } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
-import { parseFood, NutritionResult } from '../../services/nutrition';
+import { CameraView, useCameraPermissions } from 'expo-camera';
+import { parseFood, lookupBarcode, NutritionResult } from '../../services/nutrition';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 import { MealType, MealEntry } from '../../types';
 import { format } from 'date-fns';
@@ -21,6 +23,107 @@ const MEAL_SECTIONS: { type: MealType; label: string; icon: string; timeHint: st
 
 const SOURCE_LABEL: Record<string, string> = { usda: 'USDA', nutritionix: 'Nutritionix' };
 
+// ─── Barcode Scanner ──────────────────────────────────────────────────────────
+function BarcodeScannerModal({ onResult, onClose }: {
+  onResult: (results: NutritionResult[]) => void;
+  onClose: () => void;
+}) {
+  const [permission, requestPermission] = useCameraPermissions();
+  const [scanning, setScanning] = useState(true);
+  const [looking, setLooking] = useState(false);
+
+  useEffect(() => {
+    if (!permission?.granted && !permission?.canAskAgain) return;
+    if (!permission?.granted) requestPermission();
+  }, []);
+
+  async function handleBarcode({ data }: { data: string }) {
+    if (!scanning || looking) return;
+    setScanning(false);
+    setLooking(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      const results = await lookupBarcode(data);
+      if (results.length > 0) {
+        onResult(results);
+      } else {
+        Alert.alert('Not found', `No nutrition info found for barcode ${data}. Try searching by name instead.`, [
+          { text: 'Scan Again', onPress: () => { setScanning(true); setLooking(false); } },
+          { text: 'Cancel', onPress: onClose },
+        ]);
+      }
+    } catch {
+      Alert.alert('Error', 'Could not look up barcode. Check your connection.', [
+        { text: 'OK', onPress: onClose },
+      ]);
+    } finally {
+      setLooking(false);
+    }
+  }
+
+  if (!permission) return null;
+
+  if (!permission.granted) {
+    return (
+      <Modal visible animationType="slide" onRequestClose={onClose}>
+        <SafeAreaView style={scan.container}>
+          <View style={scan.permissionBox}>
+            <Text style={scan.permissionTitle}>Camera Access Needed</Text>
+            <Text style={scan.permissionBody}>Allow Forge to use your camera to scan food barcodes.</Text>
+            <TouchableOpacity onPress={requestPermission} style={scan.permissionBtn} activeOpacity={0.85}>
+              <LinearGradient colors={colors.gradients.brand as [string, string]} style={scan.permissionBtnGrad}>
+                <Text style={scan.permissionBtnText}>Allow Camera</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} style={scan.cancelLink}>
+              <Text style={scan.cancelLinkText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </SafeAreaView>
+      </Modal>
+    );
+  }
+
+  return (
+    <Modal visible animationType="slide" onRequestClose={onClose}>
+      <View style={scan.container}>
+        <CameraView
+          style={scan.camera}
+          facing="back"
+          barcodeScannerSettings={{ barcodeTypes: ['ean13', 'ean8', 'upc_a', 'upc_e'] }}
+          onBarcodeScanned={scanning ? handleBarcode : undefined}
+        />
+        {/* Overlay */}
+        <View style={scan.overlay} pointerEvents="none">
+          <View style={scan.topDim} />
+          <View style={scan.middleRow}>
+            <View style={scan.sideDim} />
+            <View style={scan.frame}>
+              <View style={[scan.corner, scan.tl]} />
+              <View style={[scan.corner, scan.tr]} />
+              <View style={[scan.corner, scan.bl]} />
+              <View style={[scan.corner, scan.br]} />
+            </View>
+            <View style={scan.sideDim} />
+          </View>
+          <View style={scan.bottomDim} />
+        </View>
+        {/* UI */}
+        <SafeAreaView style={scan.ui} edges={['top', 'bottom']}>
+          <TouchableOpacity onPress={onClose} style={scan.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Text style={scan.closeText}>✕</Text>
+          </TouchableOpacity>
+          <View style={scan.hint}>
+            {looking
+              ? <ActivityIndicator color="#fff" size="large" />
+              : <Text style={scan.hintText}>Point at a barcode</Text>}
+          </View>
+        </SafeAreaView>
+      </View>
+    </Modal>
+  );
+}
+
 // ─── Food Logger ──────────────────────────────────────────────────────────────
 function AIFoodLogger({ mealType, onClose, onAdd }: {
   mealType: MealType; onClose: () => void;
@@ -31,6 +134,7 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
   const [results, setResults] = useState<NutritionResult[]>([]);
   const [selected, setSelected] = useState<NutritionResult | null>(null);
   const [servings, setServings] = useState('1');
+  const [showScanner, setShowScanner] = useState(false);
 
   async function handleSearch() {
     if (!input.trim()) return;
@@ -96,6 +200,13 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
           autoFocus
         />
         <TouchableOpacity
+          onPress={() => setShowScanner(true)}
+          style={logStyles.scanBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={logStyles.scanBtnText}>📷</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
           onPress={handleSearch}
           disabled={searching || !input.trim()}
           style={[logStyles.parseBtn, { opacity: !input.trim() ? 0.4 : 1 }]}
@@ -105,6 +216,13 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
             : <Text style={logStyles.parseBtnText}>Search</Text>}
         </TouchableOpacity>
       </View>
+
+      {showScanner && (
+        <BarcodeScannerModal
+          onResult={r => { setShowScanner(false); setResults(r); }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
 
       {/* Result list */}
       {results.length > 0 && !selected && (
@@ -179,6 +297,45 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
   );
 }
 
+// ─── Calorie Ring ─────────────────────────────────────────────────────────────
+function CalorieRing({ cals, goal }: { cals: number; goal: number }) {
+  const size = 148;
+  const strokeWidth = 13;
+  const r = (size - strokeWidth) / 2;
+  const circ = 2 * Math.PI * r;
+  const progress = Math.min(cals / Math.max(goal, 1), 1);
+  const filled = circ * progress;
+  const isOver = cals > goal;
+  const cx = size / 2;
+  const cy = size / 2;
+
+  return (
+    <View style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center', marginBottom: spacing.md }}>
+      <Svg width={size} height={size} style={{ position: 'absolute' }}>
+        <Circle
+          cx={cx} cy={cy} r={r}
+          stroke={isOver ? 'rgba(255,59,48,0.12)' : 'rgba(255,107,53,0.12)'}
+          strokeWidth={strokeWidth}
+          fill="none"
+        />
+        {cals > 0 && (
+          <Circle
+            cx={cx} cy={cy} r={r}
+            stroke={isOver ? '#FF3B30' : '#FF6B35'}
+            strokeWidth={strokeWidth}
+            fill="none"
+            strokeDasharray={`${filled} ${circ}`}
+            strokeLinecap="round"
+            transform={`rotate(-90, ${cx}, ${cy})`}
+          />
+        )}
+      </Svg>
+      <Text style={{ fontSize: 30, fontWeight: '700', color: isOver ? colors.error : colors.text.primary, letterSpacing: -0.5, lineHeight: 36 }}>{cals}</Text>
+      <Text style={{ fontSize: 11, color: colors.text.secondary, letterSpacing: 0.2 }}>kcal eaten</Text>
+    </View>
+  );
+}
+
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 function GoalSettingsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { profile, saveProfile } = useStore();
@@ -245,14 +402,32 @@ function GoalSettingsModal({ visible, onClose }: { visible: boolean; onClose: ()
   );
 }
 
+function formatDateLabel(dateStr: string): string {
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  if (dateStr === today)     return 'Today';
+  if (dateStr === yesterday) return 'Yesterday';
+  return format(new Date(dateStr + 'T12:00:00'), 'EEEE, MMM d');
+}
+
 export default function NutritionScreen() {
-  const { nutritionToday, profile, addMealEntry, removeMealEntry, loadNutritionToday, user } = useStore();
+  const { nutritionToday, nutritionDate, setNutritionDate, loadNutritionForDate, profile, addMealEntry, removeMealEntry, user } = useStore();
   const [activeMeal, setActiveMeal] = useState<MealType | null>(null);
   const [showGoals, setShowGoals] = useState(false);
 
-  useEffect(() => { loadNutritionToday(); }, []);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const isToday  = nutritionDate === todayStr;
 
-  const today = new Date().toISOString().split('T')[0];
+  useEffect(() => { loadNutritionForDate(nutritionDate || todayStr); }, []);
+
+  function shiftDate(delta: number) {
+    const d = new Date(nutritionDate + 'T12:00:00');
+    d.setDate(d.getDate() + delta);
+    const next = d.toISOString().split('T')[0];
+    if (next > todayStr) return; // no future dates
+    setNutritionDate(next);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
 
   function getMealEntries(type: MealType): MealEntry[] {
     return nutritionToday?.meals.filter(m => m.mealType === type) ?? [];
@@ -262,9 +437,9 @@ export default function NutritionScreen() {
     try {
       const full: MealEntry = {
         ...entry,
-        id: Date.now().toString(),
-        userId: user?.id ?? '',
-        date: today,
+        id:       Date.now().toString(),
+        userId:   user?.id ?? '',
+        date:     nutritionDate || todayStr,
         loggedAt: new Date().toISOString(),
       };
       await addMealEntry(full);
@@ -283,9 +458,15 @@ export default function NutritionScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         {/* Header */}
         <View style={styles.header}>
-          <View>
-            <Text style={styles.title}>Nutrition</Text>
-            <Text style={styles.subtitle}>{format(new Date(), 'EEEE, MMMM d')}</Text>
+          <Text style={styles.title}>Nutrition</Text>
+          <View style={styles.dateNav}>
+            <TouchableOpacity onPress={() => shiftDate(-1)} style={styles.dateArrow} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={styles.dateArrowText}>‹</Text>
+            </TouchableOpacity>
+            <Text style={styles.dateLabel}>{formatDateLabel(nutritionDate || todayStr)}</Text>
+            <TouchableOpacity onPress={() => shiftDate(1)} style={[styles.dateArrow, isToday && styles.dateArrowDisabled]} disabled={isToday} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Text style={[styles.dateArrowText, isToday && styles.dateArrowTextDisabled]}>›</Text>
+            </TouchableOpacity>
           </View>
           <TouchableOpacity onPress={() => setShowGoals(true)} style={styles.settingsBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
             <Text style={{ fontSize: 22 }}>⚙️</Text>
@@ -299,15 +480,7 @@ export default function NutritionScreen() {
             style={styles.summaryGradient}
           >
             <View style={styles.summaryCenter}>
-              <View style={styles.calorieCircle}>
-                <LinearGradient
-                  colors={progress > 1 ? ['#FF3B30','#FF6B35'] : colors.gradients.brand as [string, string]}
-                  style={styles.calorieCircleInner}
-                >
-                  <Text style={styles.calorieCircleNum}>{cals}</Text>
-                  <Text style={styles.calorieCircleLabel}>kcal eaten</Text>
-                </LinearGradient>
-              </View>
+              <CalorieRing cals={cals} goal={goal} />
               <View style={styles.calorieMeta}>
                 <View style={styles.calorieStat}>
                   <Text style={styles.calorieStatVal}>{Math.max(0, goal - cals)}</Text>
@@ -419,17 +592,18 @@ export default function NutritionScreen() {
 const styles = StyleSheet.create({
   container:    { flex: 1, backgroundColor: colors.background.secondary },
   scroll:       { padding: spacing.md },
-  header:       { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: spacing.sm },
-  title:        { ...typography.h1, color: colors.text.primary },
-  subtitle:     { ...typography.small, color: colors.text.secondary, marginBottom: spacing.md },
-  settingsBtn:  { padding: spacing.xs, marginTop: spacing.xs },
+  header:              { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: spacing.sm, marginBottom: spacing.md },
+  title:               { ...typography.h1, color: colors.text.primary },
+  dateNav:             { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  dateArrow:           { padding: spacing.xs },
+  dateArrowDisabled:   { opacity: 0.25 },
+  dateArrowText:       { fontSize: 22, color: colors.brand.primary, fontWeight: '300', lineHeight: 26 },
+  dateArrowTextDisabled: { color: colors.text.tertiary },
+  dateLabel:           { ...typography.smallMed, color: colors.text.primary, minWidth: 90, textAlign: 'center' },
+  settingsBtn:         { padding: spacing.xs },
   summaryCard:  { borderRadius: radius.xl, overflow: 'hidden', marginBottom: spacing.md },
   summaryGradient: { padding: spacing.lg },
   summaryCenter: { alignItems: 'center', marginBottom: spacing.lg },
-  calorieCircle: { width: 140, height: 140, borderRadius: 70, overflow: 'hidden', marginBottom: spacing.md, ...shadows.brand },
-  calorieCircleInner: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  calorieCircleNum:   { ...typography.h1, color: '#fff', lineHeight: 40 },
-  calorieCircleLabel: { ...typography.caption, color: 'rgba(255,255,255,0.8)' },
   calorieMeta:   { flexDirection: 'row', alignItems: 'center', gap: spacing.lg },
   calorieStat:   { alignItems: 'center' },
   calorieStatVal: { ...typography.h3, color: colors.text.primary },
@@ -468,6 +642,8 @@ const logStyles = StyleSheet.create({
   sheetHint:    { ...typography.small, color: colors.text.secondary, marginBottom: spacing.md },
   inputRow:     { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
   input:        { flex: 1, backgroundColor: colors.background.secondary, borderRadius: radius.md, padding: spacing.md, ...typography.body, color: colors.text.primary },
+  scanBtn:      { backgroundColor: colors.background.tertiary, borderRadius: radius.md, padding: spacing.sm + 2, justifyContent: 'center', alignItems: 'center' },
+  scanBtnText:  { fontSize: 20 },
   parseBtn:     { backgroundColor: colors.brand.primary, borderRadius: radius.md, paddingHorizontal: spacing.md, justifyContent: 'center' },
   parseBtnText: { ...typography.smallMed, color: '#fff' },
   resultList:   { borderRadius: radius.md, overflow: 'hidden', marginBottom: spacing.md, borderWidth: 1, borderColor: colors.border.light },
@@ -511,4 +687,34 @@ const goalModal = StyleSheet.create({
   btnText:     { ...typography.h4, color: '#fff' },
   cancel:      { padding: spacing.md, alignItems: 'center' },
   cancelText:  { ...typography.bodyMed, color: colors.text.secondary },
+});
+
+const FRAME = 240;
+const scan = StyleSheet.create({
+  container:        { flex: 1, backgroundColor: '#000' },
+  camera:           { flex: 1 },
+  overlay:          { position: 'absolute', inset: 0 },
+  topDim:           { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  middleRow:        { flexDirection: 'row', height: FRAME },
+  sideDim:          { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  frame:            { width: FRAME, height: FRAME },
+  bottomDim:        { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
+  corner:           { position: 'absolute', width: 24, height: 24, borderColor: '#fff', borderWidth: 3 },
+  tl:               { top: 0, left: 0, borderBottomWidth: 0, borderRightWidth: 0 },
+  tr:               { top: 0, right: 0, borderBottomWidth: 0, borderLeftWidth: 0 },
+  bl:               { bottom: 0, left: 0, borderTopWidth: 0, borderRightWidth: 0 },
+  br:               { bottom: 0, right: 0, borderTopWidth: 0, borderLeftWidth: 0 },
+  ui:               { position: 'absolute', inset: 0, justifyContent: 'space-between' },
+  closeBtn:         { alignSelf: 'flex-end', margin: spacing.md, backgroundColor: 'rgba(0,0,0,0.4)', borderRadius: 20, width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  closeText:        { color: '#fff', fontSize: 18, fontWeight: '600' },
+  hint:             { alignItems: 'center', padding: spacing.xl, paddingBottom: spacing.xxxl },
+  hintText:         { color: '#fff', fontSize: 16, fontWeight: '500', opacity: 0.85 },
+  permissionBox:    { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl, backgroundColor: colors.background.primary },
+  permissionTitle:  { ...typography.h3, color: colors.text.primary, marginBottom: spacing.sm, textAlign: 'center' },
+  permissionBody:   { ...typography.body, color: colors.text.secondary, textAlign: 'center', marginBottom: spacing.xl },
+  permissionBtn:    { borderRadius: radius.lg, overflow: 'hidden', alignSelf: 'stretch' },
+  permissionBtnGrad:{ padding: spacing.md, alignItems: 'center' },
+  permissionBtnText:{ ...typography.h4, color: '#fff' },
+  cancelLink:       { padding: spacing.md, marginTop: spacing.sm },
+  cancelLinkText:   { ...typography.bodyMed, color: colors.text.secondary, textAlign: 'center' },
 });

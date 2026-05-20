@@ -5,7 +5,10 @@ import AppleHealthKit, {
   HealthActivityOptions,
   HealthUnit,
 } from 'react-native-health';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { HealthSnapshot } from '../types';
+
+const HEALTH_AUTHORIZED_KEY = '@healthkit_authorized';
 
 const PERMISSIONS: HealthKitPermissions = {
   permissions: {
@@ -39,18 +42,30 @@ const PERMISSIONS: HealthKitPermissions = {
 class HealthService {
   private initialized = false;
 
+  get isConnected(): boolean { return this.initialized; }
+
   async initialize(): Promise<boolean> {
     return new Promise((resolve) => {
-      AppleHealthKit.initHealthKit(PERMISSIONS, (error: string) => {
+      AppleHealthKit.initHealthKit(PERMISSIONS, async (error: string) => {
         if (error) {
           console.warn('[HealthKit] Init failed:', error);
           resolve(false);
         } else {
           this.initialized = true;
+          await AsyncStorage.setItem(HEALTH_AUTHORIZED_KEY, 'true');
           resolve(true);
         }
       });
     });
+  }
+
+  async autoInitialize(): Promise<void> {
+    try {
+      const wasAuthorized = await AsyncStorage.getItem(HEALTH_AUTHORIZED_KEY);
+      if (wasAuthorized === 'true') {
+        await this.initialize();
+      }
+    } catch {}
   }
 
   async getTodaySnapshot(): Promise<Partial<HealthSnapshot>> {
