@@ -13,8 +13,9 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.yourcompany.forge",
+      "bundleIdentifier": "com.thinkhale.forgefit",
       "buildNumber": "1",
+      "teamId": "PSZDFBL9A9",
       "infoPlist": {
         "NSHealthShareUsageDescription": "Forge reads your health data to personalize your workouts and nutrition.",
         "NSHealthUpdateUsageDescription": "Forge writes workout and nutrition data to Apple Health.",
