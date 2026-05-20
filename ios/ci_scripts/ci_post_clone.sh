@@ -21,4 +21,4 @@ npm install
 
 # Install CocoaPods dependencies
 cd "$CI_PRIMARY_REPOSITORY_PATH/ios"
-pod install
+pod install --no-repo-update
