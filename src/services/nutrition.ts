@@ -40,6 +40,19 @@ export async function lookupBarcode(upc: string): Promise<NutritionResult[]> {
   return (data?.results as NutritionResult[]) ?? [];
 }
 
+/** Direct AI lookup — skips USDA entirely, asks Claude directly. */
+export async function searchWithAI(description: string): Promise<NutritionResult[]> {
+  if (!description.trim()) return [];
+  const { data, error } = await supabase.functions.invoke('nutrition', {
+    body: { query: description, mode: 'ai' },
+  });
+  if (error || data?.error) {
+    console.warn('[Nutrition] searchWithAI failed:', error ?? data?.error);
+    throw new Error(String(error ?? data?.error));
+  }
+  return (data?.results as NutritionResult[]) ?? [];
+}
+
 /** Natural language parse — good for descriptions, e.g. "2 scrambled eggs with cheese"
  *  Uses Nutritionix when available, falls back to USDA keyword search. */
 export async function parseFood(description: string): Promise<NutritionResult[]> {

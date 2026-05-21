@@ -234,6 +234,8 @@ serve(async (req) => {
       results = await parseNutritionix(query);
       if (results.length === 0) results = await searchUSDA(query, 5);
       if (results.length === 0) results = await askClaude(query);
+    } else if (mode === 'ai') {
+      results = await askClaude(query);
     } else {
       results = await searchUSDA(query, 6);
       if (results.length === 0) results = await askClaude(query);

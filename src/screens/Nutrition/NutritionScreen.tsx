@@ -9,7 +9,7 @@ import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { parseFood, lookupBarcode, NutritionResult } from '../../services/nutrition';
+import { parseFood, lookupBarcode, searchWithAI, NutritionResult } from '../../services/nutrition';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 import { MealType, MealEntry } from '../../types';
 import { format } from 'date-fns';
@@ -135,7 +135,9 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
 }) {
   const [input, setInput] = useState('');
   const [searching, setSearching] = useState(false);
+  const [aiSearching, setAISearching] = useState(false);
   const [results, setResults] = useState<NutritionResult[]>([]);
+  const [noResults, setNoResults] = useState(false);
   const [selected, setSelected] = useState<NutritionResult | null>(null);
   const [servings, setServings] = useState('1');
   const [showScanner, setShowScanner] = useState(false);
@@ -145,18 +147,38 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
     setSearching(true);
     setResults([]);
     setSelected(null);
+    setNoResults(false);
     try {
       const found = await parseFood(input.trim());
       if (found.length > 0) {
         setResults(found);
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       } else {
-        Alert.alert('No results', 'Try a simpler description, like "scrambled eggs" or "chicken breast".');
+        setNoResults(true);
       }
     } catch {
       Alert.alert('Error', 'Could not reach the nutrition database. Check your connection.');
     } finally {
       setSearching(false);
+    }
+  }
+
+  async function handleAISearch() {
+    if (!input.trim()) return;
+    setAISearching(true);
+    setNoResults(false);
+    try {
+      const found = await searchWithAI(input.trim());
+      if (found.length > 0) {
+        setResults(found);
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        Alert.alert('No results', 'AI couldn\'t find nutritional data for this item either. Try rephrasing.');
+      }
+    } catch {
+      Alert.alert('Error', 'Could not reach the AI service. Check your connection.');
+    } finally {
+      setAISearching(false);
     }
   }
 
@@ -199,7 +221,7 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
           placeholder="e.g. 2 eggs with avocado toast..."
           placeholderTextColor={colors.text.tertiary}
           value={input}
-          onChangeText={v => { setInput(v); if (results.length) { setResults([]); setSelected(null); } }}
+          onChangeText={v => { setInput(v); if (results.length || noResults) { setResults([]); setSelected(null); setNoResults(false); } }}
           onSubmitEditing={handleSearch}
           autoFocus
         />
@@ -226,6 +248,37 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
           onResult={r => { setShowScanner(false); setResults(r); }}
           onClose={() => setShowScanner(false)}
         />
+      )}
+
+      {/* No results state */}
+      {noResults && !searching && (
+        <View style={logStyles.noResultsBox}>
+          <Text style={logStyles.noResultsText}>No database results found.</Text>
+          <TouchableOpacity
+            onPress={handleAISearch}
+            disabled={aiSearching}
+            style={logStyles.aiBtn}
+            activeOpacity={0.8}
+          >
+            {aiSearching
+              ? <ActivityIndicator color="#fff" size="small" />
+              : <Text style={logStyles.aiBtnText}>🤖 Ask AI Instead</Text>}
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Ask AI button when USDA results exist */}
+      {results.length > 0 && !selected && input.trim().length > 0 && (
+        <TouchableOpacity
+          onPress={handleAISearch}
+          disabled={aiSearching}
+          style={logStyles.aiLinkBtn}
+          activeOpacity={0.7}
+        >
+          {aiSearching
+            ? <ActivityIndicator color={colors.brand.accent} size="small" />
+            : <Text style={logStyles.aiLinkText}>Not what you want? Ask AI →</Text>}
+        </TouchableOpacity>
       )}
 
       {/* Result list */}
@@ -688,6 +741,12 @@ const logStyles = StyleSheet.create({
   addBtnText:   { ...typography.h4, color: '#fff' },
   cancelBtn:    { padding: spacing.md, alignItems: 'center', marginTop: spacing.xs },
   cancelText:   { ...typography.bodyMed, color: colors.text.secondary },
+  noResultsBox: { alignItems: 'center', paddingVertical: spacing.md, gap: spacing.sm, marginBottom: spacing.sm },
+  noResultsText: { ...typography.small, color: colors.text.secondary },
+  aiBtn:        { backgroundColor: colors.brand.accent, borderRadius: radius.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, minWidth: 160, alignItems: 'center' },
+  aiBtnText:    { ...typography.smallMed, color: '#fff' },
+  aiLinkBtn:    { paddingVertical: spacing.xs, paddingHorizontal: spacing.sm, marginBottom: spacing.xs, alignSelf: 'flex-end' },
+  aiLinkText:   { ...typography.caption, color: colors.brand.accent, fontWeight: '600' },
 });
 
 const goalModal = StyleSheet.create({

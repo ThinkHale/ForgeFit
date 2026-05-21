@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m ' *)",
+      "Bash(supabase functions *)",
+      "Bash(xcodebuild -workspace Forge.xcworkspace -scheme Forge -configuration Release -destination generic/platform=iOS -dry-run)",
+      "Bash(xcodebuild -workspace Forge.xcworkspace -scheme Forge -configuration Release -destination generic/platform=iOS build)",
+      "Bash(curl -s -X POST https://rnvxtomnidcuvifkjzwj.supabase.co/functions/v1/nutrition -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJudnh0b21uaWRjdXZpZmtqendqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNTE3MjMsImV4cCI6MjA5MjgyNzcyM30.piS-Y2q8VwALrsp5h-GV54SOX_0bzbhW5jgGrCX1V74' -H 'Content-Type: application/json' -d '{\"query\":\"chapagetti korean instant noodles\",\"mode\":\"parse\"}')",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -X POST https://rnvxtomnidcuvifkjzwj.supabase.co/functions/v1/nutrition -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJudnh0b21uaWRjdXZpZmtqendqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNTE3MjMsImV4cCI6MjA5MjgyNzcyM30.piS-Y2q8VwALrsp5h-GV54SOX_0bzbhW5jgGrCX1V74' -H 'Content-Type: application/json' -d '{\"query\":\"xyzzy nonexistent food item 12345\",\"mode\":\"parse\"}')"
+    ]
+  }
+}
