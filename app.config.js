@@ -22,7 +22,7 @@ module.exports = {
     },
     ios: {
       supportsTablet: false,
-      bundleIdentifier: process.env.IOS_BUNDLE_ID || 'com.forgefit.app',
+      bundleIdentifier: process.env.IOS_BUNDLE_ID || 'com.thinkhale.forgefitness',
       buildNumber: process.env.IOS_BUILD_NUMBER || '1',
       infoPlist: {
         NSHealthShareUsageDescription:

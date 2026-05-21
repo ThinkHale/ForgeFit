@@ -6,7 +6,9 @@ const supabaseUrl = Constants.expoConfig?.extra?.supabaseUrl as string;
 const supabaseAnonKey = Constants.expoConfig?.extra?.supabaseAnonKey as string;
 
 if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('[Supabase] Missing SUPABASE_URL or SUPABASE_ANON_KEY — check your .env file and app.config.js extra fields.');
+  throw new Error(
+    '[Forge] Missing Supabase credentials. Set SUPABASE_URL and SUPABASE_ANON_KEY in your Xcode Cloud workflow environment variables (or .env for local dev).'
+  );
 }
 
 // Secure storage adapter for Supabase auth tokens
