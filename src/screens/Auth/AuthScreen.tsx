@@ -52,7 +52,9 @@ export default function AuthScreen() {
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
   const [error, setError] = useState('');
+  const [forgotSent, setForgotSent] = useState(false);
 
   async function handleAppleSignIn() {
     setAppleLoading(true);
@@ -109,9 +111,24 @@ export default function AuthScreen() {
     }
   }
 
+  async function handleForgotPassword() {
+    if (!email.trim()) { setError('Enter your email address above first.'); return; }
+    setForgotLoading(true);
+    setError('');
+    try {
+      await authService.resetPasswordForEmail(email.trim());
+      setForgotSent(true);
+    } catch (e: any) {
+      setError(e.message ?? 'Could not send reset email.');
+    } finally {
+      setForgotLoading(false);
+    }
+  }
+
   function toggleMode() {
     setMode(m => m === 'signin' ? 'signup' : 'signin');
     setError('');
+    setForgotSent(false);
   }
 
   return (
@@ -223,6 +240,19 @@ export default function AuthScreen() {
               </LinearGradient>
             </TouchableOpacity>
 
+            {mode === 'signin' && (
+              forgotSent ? (
+                <Text style={s.forgotSent}>Reset link sent — check your email.</Text>
+              ) : (
+                <TouchableOpacity onPress={handleForgotPassword} style={s.forgotRow} disabled={forgotLoading}>
+                  {forgotLoading
+                    ? <ActivityIndicator size="small" color={colors.brand.primary} />
+                    : <Text style={s.forgotLink}>Forgot password?</Text>
+                  }
+                </TouchableOpacity>
+              )
+            )}
+
             <TouchableOpacity onPress={toggleMode} style={s.switchRow}>
               <Text style={s.switchText}>
                 {mode === 'signin' ? "Don't have an account? " : 'Already have an account? '}
@@ -304,4 +334,7 @@ const s = StyleSheet.create({
   switchRow: { alignItems: 'center', marginTop: spacing.md },
   switchText: { ...typography.small, color: colors.text.secondary },
   switchLink: { color: colors.brand.primary, fontWeight: '600' },
+  forgotRow:  { alignItems: 'center', marginTop: spacing.xs },
+  forgotLink: { ...typography.small, color: colors.brand.primary },
+  forgotSent: { ...typography.small, color: colors.text.secondary, textAlign: 'center', marginTop: spacing.xs },
 });

@@ -93,7 +93,9 @@ interface AppState {
   // Auth
   user: User | null;
   isAuthLoading: boolean;
+  isResettingPassword: boolean;
   setUser: (user: User | null) => void;
+  setResettingPassword: (value: boolean) => void;
 
   // Profile / memory
   profile: UserProfile | null;
@@ -138,10 +140,9 @@ export const useStore = create<AppState>((set, get) => ({
   // ── Auth ──────────────────────────────────────────────────────────────────────
   user: null,
   isAuthLoading: true,
-  // Keep isAuthLoading:true when a non-null user arrives so the navigator waits
-  // for loadProfile() to finish before deciding which screen to show.
-  // Only flip to false when user is null (no session → show Auth immediately).
+  isResettingPassword: false,
   setUser: (user) => set(user ? { user } : { user, isAuthLoading: false }),
+  setResettingPassword: (value) => set({ isResettingPassword: value }),
 
   // ── Profile ───────────────────────────────────────────────────────────────────
   profile: null,

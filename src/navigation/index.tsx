@@ -10,6 +10,7 @@ import { useStore } from '../store';
 import { navigationRef } from './NavigationRef';
 
 import AuthScreen from '../screens/Auth/AuthScreen';
+import ResetPasswordScreen from '../screens/Auth/ResetPasswordScreen';
 import OnboardingScreen from '../screens/Onboarding/OnboardingScreen';
 import HomeScreen from '../screens/Home/HomeScreen';
 import CoachScreen from '../screens/Coach/CoachScreen';
@@ -72,7 +73,7 @@ function MainTabs() {
 }
 
 export default function AppNavigator() {
-  const { user, profile, isAuthLoading } = useStore();
+  const { user, profile, isAuthLoading, isResettingPassword } = useStore();
   const isNew = !profile || profile.sessionCount === 0;
 
   if (isAuthLoading) {
@@ -86,7 +87,9 @@ export default function AppNavigator() {
   return (
     <NavigationContainer ref={navigationRef}>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!user ? (
+        {isResettingPassword ? (
+          <Stack.Screen name="ResetPassword" component={ResetPasswordScreen} options={{ animation: 'fade' }} />
+        ) : !user ? (
           <Stack.Screen name="Auth"          component={AuthScreen} options={{ animation: 'fade' }} />
         ) : isNew ? (
           <Stack.Screen name="Onboarding"    component={OnboardingScreen} options={{ animation: 'fade' }} />

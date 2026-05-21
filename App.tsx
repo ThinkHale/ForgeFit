@@ -9,8 +9,9 @@ import { healthService } from './src/services/health';
 import { notificationService } from './src/services/notifications';
 import { useStore } from './src/store';
 
+
 export default function App() {
-  const { setUser, loadProfile, loadNutritionToday } = useStore();
+  const { setUser, loadProfile, loadNutritionToday, setResettingPassword } = useStore();
 
   useEffect(() => {
     healthService.autoInitialize();
@@ -19,10 +20,10 @@ export default function App() {
     });
   }, []);
 
-  // Handle email confirmation deep links (forgefitness://auth/callback#access_token=...)
+  // Handle Supabase email deep links (confirmation + password reset)
+  // URL format: forgefitness://auth/callback#access_token=...&type=signup|recovery
   useEffect(() => {
     async function handleUrl(url: string) {
-      // Supabase appends tokens as a hash fragment; parse it as query params
       const parsed = Linking.parse(url);
       const fragment = (parsed as any).fragment ?? '';
       const params = Object.fromEntries(new URLSearchParams(fragment));
@@ -31,13 +32,13 @@ export default function App() {
           access_token: params.access_token,
           refresh_token: params.refresh_token,
         });
+        if (params.type === 'recovery') {
+          setResettingPassword(true);
+        }
       }
     }
 
-    // App opened via deep link while not running
     Linking.getInitialURL().then(url => { if (url) handleUrl(url); });
-
-    // App already running when deep link arrives
     const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
     return () => sub.remove();
   }, []);
