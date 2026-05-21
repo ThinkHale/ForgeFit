@@ -9,8 +9,9 @@ export interface NutritionResult {
   fat: number;
   servingSize: number;
   servingUnit: string;
-  source: 'usda' | 'nutritionix';
+  source: 'usda' | 'nutritionix' | 'ai';
   fdcId?: number;
+  aiConfidence?: 'researched' | 'estimated';
 }
 
 /** Keyword search — good for browsing, e.g. "chicken breast" */

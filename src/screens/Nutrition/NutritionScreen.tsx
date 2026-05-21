@@ -21,7 +21,11 @@ const MEAL_SECTIONS: { type: MealType; label: string; icon: string; timeHint: st
   { type: 'snack',     label: 'Snacks',    icon: '🍎', timeHint: 'Between meals' },
 ];
 
-const SOURCE_LABEL: Record<string, string> = { usda: 'USDA', nutritionix: 'Nutritionix' };
+const SOURCE_LABEL: Record<string, string> = {
+  usda: 'USDA',
+  nutritionix: 'Nutritionix',
+  ai: 'AI Estimate',
+};
 
 // ─── Barcode Scanner ──────────────────────────────────────────────────────────
 function BarcodeScannerModal({ onResult, onClose }: {
@@ -237,7 +241,9 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
                   <Text style={logStyles.resultPer}> per {r.servingSize}{r.servingUnit}</Text>
                 </Text>
               </View>
-              <Text style={logStyles.resultSource}>{SOURCE_LABEL[r.source]}</Text>
+              <Text style={[logStyles.resultSource, r.source === 'ai' && logStyles.resultSourceAI]}>
+                {SOURCE_LABEL[r.source] ?? r.source}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -268,7 +274,16 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
               </View>
             ))}
           </View>
-          <Text style={logStyles.perServing}>per {selected.servingSize}{selected.servingUnit} · {SOURCE_LABEL[selected.source]}</Text>
+          <Text style={logStyles.perServing}>
+            per {selected.servingSize}{selected.servingUnit} · {SOURCE_LABEL[selected.source] ?? selected.source}
+          </Text>
+          {selected.source === 'ai' && (
+            <Text style={logStyles.aiDisclaimer}>
+              {selected.aiConfidence === 'estimated'
+                ? '⚠️ Values are AI estimates — verify if precision matters'
+                : '🤖 Values sourced by AI — verify with packaging if available'}
+            </Text>
+          )}
           <View style={logStyles.servingsRow}>
             <Text style={logStyles.servingsLabel}>Servings</Text>
             <TextInput
@@ -652,7 +667,9 @@ const logStyles = StyleSheet.create({
   resultBrand:  { ...typography.caption, color: colors.text.secondary, marginBottom: 2 },
   resultMacros: { ...typography.caption, color: colors.text.secondary },
   resultPer:    { color: colors.text.tertiary },
-  resultSource: { ...typography.caption, color: colors.brand.primary, fontWeight: '600', marginLeft: spacing.sm },
+  resultSource:    { ...typography.caption, color: colors.brand.primary, fontWeight: '600', marginLeft: spacing.sm },
+  resultSourceAI:  { color: colors.brand.accent },
+  aiDisclaimer:    { ...typography.caption, color: colors.text.tertiary, marginBottom: spacing.sm, fontStyle: 'italic' },
   parsedCard:   { backgroundColor: colors.glass.brand, borderRadius: radius.lg, padding: spacing.md, marginBottom: spacing.md },
   parsedHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: spacing.sm },
   parsedName:   { ...typography.h4, color: colors.text.primary },

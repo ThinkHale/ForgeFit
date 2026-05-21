@@ -3,6 +3,7 @@ import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
 const USDA_API_KEY        = Deno.env.get('USDA_API_KEY') ?? '';
 const NUTRITIONIX_APP_ID  = Deno.env.get('NUTRITIONIX_APP_ID') ?? '';
 const NUTRITIONIX_APP_KEY = Deno.env.get('NUTRITIONIX_APP_KEY') ?? '';
+const ANTHROPIC_API_KEY   = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -18,8 +19,9 @@ interface NutritionResult {
   fat: number;
   servingSize: number;
   servingUnit: string;
-  source: 'usda' | 'nutritionix';
+  source: 'usda' | 'nutritionix' | 'ai';
   fdcId?: number;
+  aiConfidence?: 'researched' | 'estimated';
 }
 
 // ─── USDA FoodData Central ────────────────────────────────────────────────────
@@ -31,7 +33,6 @@ async function searchUSDA(query: string, limit = 5): Promise<NutritionResult[]> 
   url.searchParams.set('query', query);
   url.searchParams.set('api_key', USDA_API_KEY);
   url.searchParams.set('pageSize', String(limit));
-  // Include all data types for broad coverage
   url.searchParams.set('dataType', 'Foundation,SR Legacy,Survey (FNDDS),Branded');
 
   const res = await fetch(url.toString());
@@ -44,7 +45,6 @@ async function searchUSDA(query: string, limit = 5): Promise<NutritionResult[]> 
     const get = (id: number) =>
       (nutrients.find(n => n.nutrientId === id)?.value as number) ?? 0;
 
-    // USDA nutrient IDs: 1008=Energy, 1003=Protein, 1005=Carbs, 1004=Fat
     return {
       name:        food.description as string,
       brand:       (food.brandOwner as string | undefined) ?? (food.brandName as string | undefined),
@@ -61,10 +61,6 @@ async function searchUSDA(query: string, limit = 5): Promise<NutritionResult[]> 
 }
 
 // ─── Nutritionix natural language ─────────────────────────────────────────────
-// Activates automatically once NUTRITIONIX_APP_ID and NUTRITIONIX_APP_KEY
-// are set as Edge Function secrets:
-//   supabase secrets set NUTRITIONIX_APP_ID=...
-//   supabase secrets set NUTRITIONIX_APP_KEY=...
 
 async function parseNutritionix(query: string): Promise<NutritionResult[]> {
   if (!NUTRITIONIX_APP_ID || !NUTRITIONIX_APP_KEY) return [];
@@ -144,6 +140,74 @@ async function lookupBarcodeUSDA(upc: string): Promise<NutritionResult[]> {
   });
 }
 
+// ─── Claude AI fallback ───────────────────────────────────────────────────────
+
+async function askClaude(query: string): Promise<NutritionResult[]> {
+  if (!ANTHROPIC_API_KEY) return [];
+
+  const prompt = `You are a nutrition database. The user searched for: "${query}"
+
+This food was not found in USDA or Nutritionix databases. Provide nutritional data using:
+1. Published nutrition data if you know it (e.g. USDA, manufacturer info, nutrition labels)
+2. A reasonable estimate based on similar foods and typical preparation if exact data is unavailable
+
+Respond with ONLY a JSON array of 1-3 results (most relevant first). Each object must have exactly these fields:
+{
+  "name": "Descriptive food name",
+  "calories": 000,
+  "protein": 0.0,
+  "carbs": 0.0,
+  "fat": 0.0,
+  "servingSize": 100,
+  "servingUnit": "g",
+  "confidence": "researched" or "estimated"
+}
+
+Rules:
+- calories: integer (kcal per serving)
+- protein/carbs/fat: one decimal place (grams per serving)
+- servingSize + servingUnit: typical serving (e.g. 100 g, 1 cup, 1 piece)
+- confidence: "researched" if from known published data, "estimated" if approximated
+- No markdown, no explanation, just the JSON array`;
+
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+
+  if (!res.ok) return [];
+
+  const data = await res.json();
+  const text = data.content?.[0]?.text ?? '';
+
+  try {
+    const json = JSON.parse(text.trim());
+    const items = Array.isArray(json) ? json : [json];
+    return items.map((item: Record<string, unknown>) => ({
+      name:         String(item.name ?? query),
+      calories:     Math.round(Number(item.calories) || 0),
+      protein:      Math.round((Number(item.protein) || 0) * 10) / 10,
+      carbs:        Math.round((Number(item.carbs) || 0) * 10) / 10,
+      fat:          Math.round((Number(item.fat) || 0) * 10) / 10,
+      servingSize:  Number(item.servingSize) || 100,
+      servingUnit:  String(item.servingUnit ?? 'g'),
+      source:       'ai' as const,
+      aiConfidence: (item.confidence === 'researched' ? 'researched' : 'estimated') as 'researched' | 'estimated',
+    }));
+  } catch {
+    return [];
+  }
+}
+
 // ─── Router ────────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
@@ -165,14 +229,14 @@ serve(async (req) => {
     if (mode === 'barcode') {
       results = await lookupBarcodeNutritionix(query);
       if (results.length === 0) results = await lookupBarcodeUSDA(query);
+      if (results.length === 0) results = await askClaude(query);
     } else if (mode === 'parse') {
-      // Natural language: Nutritionix preferred (understands "2 scrambled eggs"),
-      // falls back to USDA keyword search when Nutritionix isn't configured yet.
       results = await parseNutritionix(query);
       if (results.length === 0) results = await searchUSDA(query, 5);
+      if (results.length === 0) results = await askClaude(query);
     } else {
-      // Keyword search: USDA is primary source
       results = await searchUSDA(query, 6);
+      if (results.length === 0) results = await askClaude(query);
     }
 
     return new Response(JSON.stringify({ results }), {
