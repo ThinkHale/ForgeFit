@@ -20,11 +20,22 @@ export default function App() {
     });
   }, []);
 
-  // Handle Supabase email deep links (confirmation + password reset)
-  // URL format: forgefitness://auth/callback#access_token=...&type=signup|recovery
+  // Handle Supabase email deep links (confirmation + password reset).
+  // Supabase v2 uses PKCE: forgefitness://auth/callback?code=...
+  // Older implicit flow: forgefitness://auth/callback#access_token=...&type=recovery
+  // PASSWORD_RECOVERY auth event (fired after code exchange) triggers reset screen.
   useEffect(() => {
     async function handleUrl(url: string) {
       const parsed = Linking.parse(url);
+
+      // PKCE flow — ?code= query param
+      const code = parsed.queryParams?.code as string | undefined;
+      if (code) {
+        await supabase.auth.exchangeCodeForSession(code);
+        return; // auth state change handles PASSWORD_RECOVERY routing
+      }
+
+      // Implicit flow fallback — #access_token= fragment
       const fragment = (parsed as any).fragment ?? '';
       const params = Object.fromEntries(new URLSearchParams(fragment));
       if (params.access_token && params.refresh_token) {
@@ -60,6 +71,10 @@ export default function App() {
         // TOKEN_REFRESHED is excluded — it fires when returning from background (e.g.
         // after a HealthKit permission dialog) and would race with an in-progress
         // saveProfile call, resetting sessionCount back to 0.
+        if (event === 'PASSWORD_RECOVERY') {
+          setResettingPassword(true);
+          return;
+        }
         if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
           await loadProfile();
           loadNutritionToday();
