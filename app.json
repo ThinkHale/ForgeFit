@@ -13,7 +13,7 @@
     },
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.thinkhale.forgefit",
+      "bundleIdentifier": "com.thinkhale.forgefitness",
       "buildNumber": "1",
       "teamId": "MZ3635323W",
       "infoPlist": {

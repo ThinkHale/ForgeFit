@@ -368,7 +368,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_DEBUG";
-				PRODUCT_BUNDLE_IDENTIFIER = com.thinkhale.forgefit;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thinkhale.forgefitness;
 				PRODUCT_NAME = Forge;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Forge/Forge-Bridging-Header.h";
@@ -403,7 +403,7 @@
 					"-lc++",
 				);
 				OTHER_SWIFT_FLAGS = "$(inherited) -D EXPO_CONFIGURATION_RELEASE";
-				PRODUCT_BUNDLE_IDENTIFIER = com.thinkhale.forgefit;
+				PRODUCT_BUNDLE_IDENTIFIER = com.thinkhale.forgefitness;
 				PRODUCT_NAME = Forge;
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SWIFT_OBJC_BRIDGING_HEADER = "Forge/Forge-Bridging-Header.h";
