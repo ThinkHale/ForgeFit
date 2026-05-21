@@ -2,8 +2,9 @@ import React, { useEffect } from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
+import * as Linking from 'expo-linking';
 import AppNavigator from './src/navigation';
-import { authService } from './src/services/supabase';
+import { authService, supabase } from './src/services/supabase';
 import { healthService } from './src/services/health';
 import { notificationService } from './src/services/notifications';
 import { useStore } from './src/store';
@@ -13,10 +14,32 @@ export default function App() {
 
   useEffect(() => {
     healthService.autoInitialize();
-    // Re-schedule reminders silently if permission was already granted
     notificationService.areNotificationsEnabled().then(enabled => {
       if (enabled) notificationService.scheduleDefaultReminders();
     });
+  }, []);
+
+  // Handle email confirmation deep links (forgefitness://auth/callback#access_token=...)
+  useEffect(() => {
+    async function handleUrl(url: string) {
+      // Supabase appends tokens as a hash fragment; parse it as query params
+      const parsed = Linking.parse(url);
+      const fragment = (parsed as any).fragment ?? '';
+      const params = Object.fromEntries(new URLSearchParams(fragment));
+      if (params.access_token && params.refresh_token) {
+        await supabase.auth.setSession({
+          access_token: params.access_token,
+          refresh_token: params.refresh_token,
+        });
+      }
+    }
+
+    // App opened via deep link while not running
+    Linking.getInitialURL().then(url => { if (url) handleUrl(url); });
+
+    // App already running when deep link arrives
+    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {

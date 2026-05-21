@@ -11,6 +11,7 @@ module.exports = {
   expo: {
     name: 'Forge',
     slug: 'forge-fitness',
+    scheme: 'forgefitness',
     version: '0.1.0',
     orientation: 'portrait',
     icon: './assets/icon.png',

@@ -34,7 +34,10 @@ export const authService = {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
-      options: { data: { name } },
+      options: {
+        data: { name },
+        emailRedirectTo: 'forgefitness://auth/callback',
+      },
     });
     if (error) throw error;
     return data;
