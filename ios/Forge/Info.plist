@@ -29,7 +29,7 @@
       <dict>
         <key>CFBundleURLSchemes</key>
         <array>
-          <string>com.thinkhale.forgefit</string>
+          <string>forgefitness</string>
         </array>
       </dict>
     </array>
