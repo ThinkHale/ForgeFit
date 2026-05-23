@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Alert, ActivityIndicator, Modal,
+  TextInput, Alert, ActivityIndicator, Modal, Keyboard,
+  KeyboardAvoidingView, Platform, TouchableWithoutFeedback,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Svg, { Circle } from 'react-native-svg';
@@ -22,9 +23,10 @@ const MEAL_SECTIONS: { type: MealType; label: string; icon: string; timeHint: st
 ];
 
 const SOURCE_LABEL: Record<string, string> = {
-  usda: 'USDA',
-  nutritionix: 'Nutritionix',
-  ai: 'AI Estimate',
+  usda:          'USDA',
+  nutritionix:   'Nutritionix',
+  openfoodfacts: 'Open Food Facts',
+  ai:            'AI Estimate',
 };
 
 // ─── Barcode Scanner ──────────────────────────────────────────────────────────
@@ -414,6 +416,7 @@ function GoalSettingsModal({ visible, onClose }: { visible: boolean; onClose: ()
   const [saving, setSaving] = useState(false);
 
   async function handleSave() {
+    Keyboard.dismiss();
     setSaving(true);
     try {
       await saveProfile({
@@ -429,9 +432,11 @@ function GoalSettingsModal({ visible, onClose }: { visible: boolean; onClose: ()
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={() => { Keyboard.dismiss(); onClose(); }}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
       <View style={goalModal.overlay}>
-        <TouchableOpacity style={goalModal.backdrop} onPress={onClose} />
+        <TouchableOpacity style={goalModal.backdrop} onPress={() => { Keyboard.dismiss(); onClose(); }} />
         <View style={goalModal.sheet}>
           <View style={goalModal.handle} />
           <Text style={goalModal.title}>Daily Goals</Text>
@@ -461,11 +466,13 @@ function GoalSettingsModal({ visible, onClose }: { visible: boolean; onClose: ()
               <Text style={goalModal.btnText}>{saving ? 'Saving…' : 'Save Goals'}</Text>
             </LinearGradient>
           </TouchableOpacity>
-          <TouchableOpacity onPress={onClose} style={goalModal.cancel}>
+          <TouchableOpacity onPress={() => { Keyboard.dismiss(); onClose(); }} style={goalModal.cancel}>
             <Text style={goalModal.cancelText}>Cancel</Text>
           </TouchableOpacity>
         </View>
       </View>
+      </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

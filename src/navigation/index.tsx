@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ActivityIndicator, TouchableOpacity } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -34,11 +34,13 @@ function TabBar({ state, descriptors, navigation }: any) {
       {state.routes.map((route: any, i: number) => {
         const focused = state.index === i;
         return (
-          <View key={route.key} style={tabStyles.tab}>
-            <Text
-              onPress={() => navigation.navigate(route.name)}
-              style={[tabStyles.icon, focused && tabStyles.iconFocused]}
-            >
+          <TouchableOpacity
+            key={route.key}
+            style={tabStyles.tab}
+            onPress={() => navigation.navigate(route.name)}
+            activeOpacity={0.7}
+          >
+            <Text style={[tabStyles.icon, focused && tabStyles.iconFocused]}>
               {TAB_ICONS[route.name]}
             </Text>
             <Text style={[tabStyles.label, focused && tabStyles.labelFocused]}>
@@ -50,7 +52,7 @@ function TabBar({ state, descriptors, navigation }: any) {
                 style={tabStyles.activeDot}
               />
             )}
-          </View>
+          </TouchableOpacity>
         );
       })}
     </View>

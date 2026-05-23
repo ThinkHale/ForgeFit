@@ -83,12 +83,14 @@ class HealthService {
       this.getRestingHeartRate(),
     ]);
 
+    const hr  = heartRate.status === 'fulfilled' ? heartRate.value : 0;
+    const rhr = restingHR.status === 'fulfilled' ? restingHR.value : 0;
     return {
       date: new Date().toISOString().split('T')[0],
       steps: steps.status === 'fulfilled' ? steps.value : 0,
       activeCalories: activeCalories.status === 'fulfilled' ? activeCalories.value : 0,
-      heartRateAvg: heartRate.status === 'fulfilled' ? heartRate.value : 0,
-      heartRateResting: restingHR.status === 'fulfilled' ? restingHR.value : 0,
+      heartRateAvg:     hr || rhr,
+      heartRateResting: rhr,
     };
   }
 
@@ -114,17 +116,27 @@ class HealthService {
 
   private getLatestHeartRate(): Promise<number> {
     return new Promise((resolve) => {
-      const opts: HealthInputOptions = { limit: 1, ascending: false };
+      const end = new Date();
+      const start = new Date(end.getTime() - 24 * 60 * 60 * 1000);
+      const opts: HealthInputOptions = {
+        startDate: start.toISOString(),
+        endDate:   end.toISOString(),
+        limit:     5,
+        ascending: false,
+      };
       AppleHealthKit.getHeartRateSamples(opts, (err, results) => {
         if (err || !Array.isArray(results) || !results.length) { resolve(0); return; }
-        resolve(Math.round(results[0].value ?? 0));
+        const avg = results.reduce((s, r) => s + (r.value ?? 0), 0) / results.length;
+        resolve(Math.round(avg));
       });
     });
   }
 
   private getRestingHeartRate(): Promise<number> {
     return new Promise((resolve) => {
-      const opts: HealthInputOptions = { limit: 1, ascending: false };
+      const end = new Date();
+      const start = new Date(end.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const opts: HealthInputOptions = { startDate: start.toISOString(), endDate: end.toISOString(), limit: 1, ascending: false };
       AppleHealthKit.getRestingHeartRate(opts, (err, result) => {
         resolve(err ? 0 : Math.round((result as HealthValue).value ?? 0));
       });
@@ -137,6 +149,33 @@ class HealthService {
       AppleHealthKit.getWeightSamples(opts, (err, results) => {
         if (err || !Array.isArray(results) || !results.length) { resolve(null); return; }
         resolve(results[0].value ?? null);
+      });
+    });
+  }
+
+  async getWeeklyActiveCalories(): Promise<Array<{ date: string; value: number }>> {
+    return new Promise((resolve) => {
+      const end = new Date();
+      const start = new Date();
+      start.setDate(start.getDate() - 6);
+      start.setHours(0, 0, 0, 0);
+      const opts: HealthInputOptions = {
+        startDate: start.toISOString(),
+        endDate:   end.toISOString(),
+      };
+      AppleHealthKit.getActiveEnergyBurned(opts, (err, results) => {
+        const days = Array.from({ length: 7 }, (_, i) => {
+          const d = new Date();
+          d.setDate(d.getDate() - (6 - i));
+          return { date: d.toISOString().split('T')[0], value: 0 };
+        });
+        if (err || !Array.isArray(results)) { resolve(days); return; }
+        const byDate: Record<string, number> = {};
+        for (const r of results) {
+          const date = new Date(r.startDate).toISOString().split('T')[0];
+          byDate[date] = (byDate[date] ?? 0) + (r.value ?? 0);
+        }
+        resolve(days.map(d => ({ date: d.date, value: Math.round(byDate[d.date] ?? 0) })));
       });
     });
   }

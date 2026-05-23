@@ -19,7 +19,7 @@ interface NutritionResult {
   fat: number;
   servingSize: number;
   servingUnit: string;
-  source: 'usda' | 'nutritionix' | 'ai';
+  source: 'usda' | 'nutritionix' | 'openfoodfacts' | 'ai';
   fdcId?: number;
   aiConfidence?: 'researched' | 'estimated';
 }
@@ -140,6 +140,40 @@ async function lookupBarcodeUSDA(upc: string): Promise<NutritionResult[]> {
   });
 }
 
+// ─── Open Food Facts (free, no key required) ─────────────────────────────────
+
+async function lookupBarcodeOpenFoodFacts(upc: string): Promise<NutritionResult[]> {
+  const res = await fetch(`https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(upc)}.json`);
+  if (!res.ok) return [];
+  const data = await res.json();
+  if (data.status !== 1 || !data.product) return [];
+
+  const p = data.product;
+  const n = p.nutriments ?? {};
+  const hasServing = !!p.serving_quantity;
+
+  const cal   = Number(hasServing ? (n['energy-kcal_serving'] ?? n['energy-kcal_100g'] ?? 0) : (n['energy-kcal_100g'] ?? 0));
+  const prot  = Number(hasServing ? (n['proteins_serving']      ?? n['proteins_100g']      ?? 0) : (n['proteins_100g']      ?? 0));
+  const carbs = Number(hasServing ? (n['carbohydrates_serving'] ?? n['carbohydrates_100g'] ?? 0) : (n['carbohydrates_100g'] ?? 0));
+  const fat   = Number(hasServing ? (n['fat_serving']           ?? n['fat_100g']           ?? 0) : (n['fat_100g']           ?? 0));
+
+  const name  = String(p.product_name_en || p.product_name || p.generic_name || 'Unknown Product');
+  const brand = (p.brands as string | undefined)?.split(',')[0]?.trim();
+  const servingUnit = String(p.serving_size ?? '').replace(/^[\d.,\s]+/, '').trim() || 'g';
+
+  return [{
+    name,
+    brand: brand ?? undefined,
+    calories:    Math.round(cal || 0),
+    protein:     Math.round((prot  || 0) * 10) / 10,
+    carbs:       Math.round((carbs || 0) * 10) / 10,
+    fat:         Math.round((fat   || 0) * 10) / 10,
+    servingSize: Number(p.serving_quantity) || 100,
+    servingUnit,
+    source:      'openfoodfacts' as const,
+  }];
+}
+
 // ─── Claude AI fallback ───────────────────────────────────────────────────────
 
 async function askClaude(query: string): Promise<NutritionResult[]> {
@@ -187,10 +221,14 @@ Rules:
   if (!res.ok) return [];
 
   const data = await res.json();
-  const text = data.content?.[0]?.text ?? '';
+  const raw = data.content?.[0]?.text ?? '';
+  const cleaned = raw.trim()
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '');
 
   try {
-    const json = JSON.parse(text.trim());
+    const json = JSON.parse(cleaned);
     const items = Array.isArray(json) ? json : [json];
     return items.map((item: Record<string, unknown>) => ({
       name:         String(item.name ?? query),
@@ -228,6 +266,7 @@ serve(async (req) => {
 
     if (mode === 'barcode') {
       results = await lookupBarcodeNutritionix(query);
+      if (results.length === 0) results = await lookupBarcodeOpenFoodFacts(query);
       if (results.length === 0) results = await lookupBarcodeUSDA(query);
       if (results.length === 0) results = await askClaude(query);
     } else if (mode === 'parse') {

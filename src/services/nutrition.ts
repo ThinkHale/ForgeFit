@@ -9,7 +9,7 @@ export interface NutritionResult {
   fat: number;
   servingSize: number;
   servingUnit: string;
-  source: 'usda' | 'nutritionix' | 'ai';
+  source: 'usda' | 'nutritionix' | 'openfoodfacts' | 'ai';
   fdcId?: number;
   aiConfidence?: 'researched' | 'estimated';
 }
