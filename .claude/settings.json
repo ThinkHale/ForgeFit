@@ -7,7 +7,13 @@
       "Bash(xcodebuild -workspace Forge.xcworkspace -scheme Forge -configuration Release -destination generic/platform=iOS build)",
       "Bash(curl -s -X POST https://rnvxtomnidcuvifkjzwj.supabase.co/functions/v1/nutrition -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJudnh0b21uaWRjdXZpZmtqendqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNTE3MjMsImV4cCI6MjA5MjgyNzcyM30.piS-Y2q8VwALrsp5h-GV54SOX_0bzbhW5jgGrCX1V74' -H 'Content-Type: application/json' -d '{\"query\":\"chapagetti korean instant noodles\",\"mode\":\"parse\"}')",
       "Bash(python3 -m json.tool)",
-      "Bash(curl -s -X POST https://rnvxtomnidcuvifkjzwj.supabase.co/functions/v1/nutrition -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJudnh0b21uaWRjdXZpZmtqendqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNTE3MjMsImV4cCI6MjA5MjgyNzcyM30.piS-Y2q8VwALrsp5h-GV54SOX_0bzbhW5jgGrCX1V74' -H 'Content-Type: application/json' -d '{\"query\":\"xyzzy nonexistent food item 12345\",\"mode\":\"parse\"}')"
+      "Bash(curl -s -X POST https://rnvxtomnidcuvifkjzwj.supabase.co/functions/v1/nutrition -H 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJudnh0b21uaWRjdXZpZmtqendqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcyNTE3MjMsImV4cCI6MjA5MjgyNzcyM30.piS-Y2q8VwALrsp5h-GV54SOX_0bzbhW5jgGrCX1V74' -H 'Content-Type: application/json' -d '{\"query\":\"xyzzy nonexistent food item 12345\",\"mode\":\"parse\"}')",
+      "Bash(sips -g all /Users/Cody.Hale/ThinkHale/ForgeFit/assets/icon.png)",
+      "Bash(sips -g all \"/Users/Cody.Hale/ThinkHale/ForgeFit/ios/Forge/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png\")",
+      "Bash(sips -s format png --removeAlpha /Users/Cody.Hale/ThinkHale/ForgeFit/assets/icon.png --out /Users/Cody.Hale/ThinkHale/ForgeFit/assets/icon.png)",
+      "Bash(sips -s format png --removeAlpha \"/Users/Cody.Hale/ThinkHale/ForgeFit/ios/Forge/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png\" --out \"/Users/Cody.Hale/ThinkHale/ForgeFit/ios/Forge/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png\")",
+      "Bash(sips --help)",
+      "Bash(python3 -)"
     ]
   }
 }
