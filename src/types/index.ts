@@ -45,6 +45,8 @@ export interface FoodItem {
   id: string;
   name: string;
   brand?: string;
+  nutritionSource?: 'usda' | 'nutritionix' | 'openfoodfacts' | 'ai';
+  aiConfidence?: 'researched' | 'estimated';
   servingSize: number;
   servingUnit: string;
   calories: number;
@@ -196,6 +198,7 @@ export interface ActiveWorkoutExercise {
 export interface ActiveWorkout {
   id: string;
   name: string;
+  type?: WorkoutSession['type'];
   exercises: ActiveWorkoutExercise[];
   startedAt: string;
 }

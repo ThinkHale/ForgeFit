@@ -3,7 +3,6 @@ import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
   TextInput, Switch, Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
@@ -42,7 +41,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 // ─── Row ──────────────────────────────────────────────────────────────────────
-function Row({ label, children, first, last }: {
+function Row({ label, children, first }: {
   label: string; children: React.ReactNode; first?: boolean; last?: boolean;
 }) {
   return (
@@ -54,7 +53,7 @@ function Row({ label, children, first, last }: {
 }
 
 export default function SettingsScreen({ navigation }: { navigation: any }) {
-  const { profile, saveProfile, healthToday, setHealthToday } = useStore();
+  const { profile, saveProfile, setHealthToday } = useStore();
 
   // ── Local state (mirrors profile) ────────────────────────────────────────────
   const [name,     setName]     = useState(profile?.name     ?? '');

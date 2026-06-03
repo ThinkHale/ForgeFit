@@ -27,7 +27,7 @@ const TAB_ICONS: Record<string, string> = {
   Home: '🏠', Coach: '⚡', Nutrition: '🥗', Workouts: '💪', Progress: '📊',
 };
 
-function TabBar({ state, descriptors, navigation }: any) {
+function TabBar({ state, navigation }: any) {
   const { bottom } = useSafeAreaInsets();
   return (
     <View style={[tabStyles.container, { paddingBottom: bottom || 16 }]}>

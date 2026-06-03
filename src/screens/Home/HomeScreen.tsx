@@ -12,7 +12,6 @@ import { supabase } from '../../services/supabase';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 
 const { width } = Dimensions.get('window');
-const CARD_WIDTH = (width - spacing.md * 2 - spacing.sm * 2) / 3;
 
 // ─── Simple bar chart ─────────────────────────────────────────────────────────
 function BarChart({ data, color }: { data: Array<{ label: string; value: number }>; color: string }) {
@@ -42,8 +41,8 @@ function BarChart({ data, color }: { data: Array<{ label: string; value: number 
 }
 
 // ─── Activity Ring ────────────────────────────────────────────────────────────
-function ActivityRing({ progress, size = 44, strokeWidth = 5, color = colors.brand.primary }: {
-  progress: number; size?: number; strokeWidth?: number; color?: string;
+function ActivityRing({ progress, size = 44, strokeWidth = 5 }: {
+  progress: number; size?: number; strokeWidth?: number;
 }) {
   const r = (size - strokeWidth) / 2;
   const circ = 2 * Math.PI * r;
@@ -246,12 +245,6 @@ function QuickAction({ icon, label, onPress, accent }: {
       <Text style={styles.quickActionLabel}>{label}</Text>
     </TouchableOpacity>
   );
-}
-
-// ─── Goal Settings Modal ──────────────────────────────────────────────────────
-function GoalSettingsModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  // No-op; goal settings are in NutritionScreen. This just holds the shape.
-  return null;
 }
 
 // ─── Main screen ──────────────────────────────────────────────────────────────

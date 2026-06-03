@@ -3,6 +3,7 @@ import { supabase } from './supabase';
 export interface NutritionResult {
   name: string;
   brand?: string;
+  barcode?: string;
   calories: number;
   protein: number;
   carbs: number;
@@ -37,7 +38,7 @@ export async function lookupBarcode(upc: string): Promise<NutritionResult[]> {
     console.warn('[Nutrition] lookupBarcode failed:', error ?? data?.error);
     return [];
   }
-  return (data?.results as NutritionResult[]) ?? [];
+  return (((data?.results as NutritionResult[]) ?? []).map(r => ({ ...r, barcode: upc.trim() })));
 }
 
 /** Direct AI lookup — skips USDA entirely, asks Claude directly. */

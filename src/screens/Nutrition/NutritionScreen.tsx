@@ -196,6 +196,10 @@ function AIFoodLogger({ mealType, onClose, onAdd }: {
       foodItem: {
         id: Date.now().toString(),
         name: selected.name,
+        brand: selected.brand,
+        barcode: selected.barcode,
+        nutritionSource: selected.source,
+        aiConfidence: selected.aiConfidence,
         servingSize: selected.servingSize,
         servingUnit: selected.servingUnit,
         calories: selected.calories,
@@ -477,6 +481,119 @@ function GoalSettingsModal({ visible, onClose }: { visible: boolean; onClose: ()
   );
 }
 
+function EditMealEntryModal({
+  entry,
+  onClose,
+  onSave,
+  onDelete,
+}: {
+  entry: MealEntry | null;
+  onClose: () => void;
+  onSave: (entryId: string, updates: Partial<Pick<MealEntry, 'mealType' | 'servings'>>) => Promise<void>;
+  onDelete: (entryId: string) => Promise<void>;
+}) {
+  const [mealType, setMealType] = useState<MealType>(entry?.mealType ?? 'snack');
+  const [servings, setServings] = useState(String(entry?.servings ?? 1));
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!entry) return;
+    setMealType(entry.mealType);
+    setServings(String(entry.servings));
+  }, [entry]);
+
+  if (!entry) return null;
+  const currentEntry = entry;
+
+  async function handleSave() {
+    const parsedServings = Math.max(0.01, parseFloat(servings) || 1);
+    setSaving(true);
+    try {
+      await onSave(currentEntry.id, { mealType, servings: parsedServings });
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onClose();
+    } catch {
+      Alert.alert('Error', 'Could not update this food entry. Check your connection and try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    setSaving(true);
+    try {
+      await onDelete(currentEntry.id);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onClose();
+    } catch {
+      Alert.alert('Error', 'Could not remove this food entry. Check your connection and try again.');
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal visible transparent animationType="slide" onRequestClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        <View style={editModal.overlay}>
+          <TouchableOpacity style={editModal.backdrop} onPress={onClose} />
+          <View style={editModal.sheet}>
+            <View style={editModal.handle} />
+            <Text style={editModal.title}>{currentEntry.foodItem.name}</Text>
+            {currentEntry.foodItem.brand && <Text style={editModal.sub}>{currentEntry.foodItem.brand}</Text>}
+            <Text style={editModal.detail}>
+              {currentEntry.foodItem.calories} kcal · {currentEntry.foodItem.protein}g P · {currentEntry.foodItem.carbs}g C · {currentEntry.foodItem.fat}g F
+              <Text style={{ color: colors.text.tertiary }}> per {currentEntry.foodItem.servingSize}{currentEntry.foodItem.servingUnit}</Text>
+            </Text>
+
+            <Text style={editModal.label}>Meal</Text>
+            <View style={editModal.mealChips}>
+              {MEAL_SECTIONS.map(m => (
+                <TouchableOpacity
+                  key={m.type}
+                  onPress={() => setMealType(m.type)}
+                  style={[editModal.mealChip, mealType === m.type && editModal.mealChipActive]}
+                >
+                  <Text style={[editModal.mealChipText, mealType === m.type && editModal.mealChipTextActive]}>
+                    {m.icon} {m.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={editModal.label}>Servings</Text>
+            <TextInput
+              style={editModal.input}
+              value={servings}
+              onChangeText={setServings}
+              keyboardType="decimal-pad"
+              selectTextOnFocus
+            />
+
+            {(currentEntry.foodItem.nutritionSource || currentEntry.foodItem.barcode) && (
+              <Text style={editModal.source}>
+                {currentEntry.foodItem.nutritionSource ? `Source: ${SOURCE_LABEL[currentEntry.foodItem.nutritionSource] ?? currentEntry.foodItem.nutritionSource}` : ''}
+                {currentEntry.foodItem.barcode ? ` · Barcode: ${currentEntry.foodItem.barcode}` : ''}
+              </Text>
+            )}
+
+            <TouchableOpacity onPress={handleSave} disabled={saving} style={editModal.saveBtn} activeOpacity={0.85}>
+              <LinearGradient colors={colors.gradients.brand as [string, string]} style={editModal.saveGradient}>
+                <Text style={editModal.saveText}>{saving ? 'Saving...' : 'Save Changes'}</Text>
+              </LinearGradient>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleDelete} disabled={saving} style={editModal.deleteBtn}>
+              <Text style={editModal.deleteText}>Delete Entry</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={onClose} disabled={saving} style={editModal.cancelBtn}>
+              <Text style={editModal.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
 function formatDateLabel(dateStr: string): string {
   const today = new Date().toISOString().split('T')[0];
   const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -486,9 +603,10 @@ function formatDateLabel(dateStr: string): string {
 }
 
 export default function NutritionScreen() {
-  const { nutritionToday, nutritionDate, setNutritionDate, loadNutritionForDate, profile, addMealEntry, removeMealEntry, user } = useStore();
+  const { nutritionToday, nutritionDate, setNutritionDate, loadNutritionForDate, profile, addMealEntry, updateMealEntry, removeMealEntry, user } = useStore();
   const [activeMeal, setActiveMeal] = useState<MealType | null>(null);
   const [showGoals, setShowGoals] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<MealEntry | null>(null);
 
   const todayStr = new Date().toISOString().split('T')[0];
   const isToday  = nutritionDate === todayStr;
@@ -526,8 +644,6 @@ export default function NutritionScreen() {
 
   const cals = nutritionToday?.totalCalories ?? 0;
   const goal = nutritionToday?.calorieGoal ?? (profile?.dailyCalorieGoal ?? 2000);
-  const progress = cals / goal;
-
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
@@ -624,7 +740,7 @@ export default function NutritionScreen() {
                 </TouchableOpacity>
               ) : (
                 entries.map(entry => (
-                  <View key={entry.id} style={styles.entryRow}>
+                  <TouchableOpacity key={entry.id} onPress={() => setEditingEntry(entry)} style={styles.entryRow} activeOpacity={0.7}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.entryName}>{entry.foodItem.name}</Text>
                       <Text style={styles.entryDetail}>
@@ -632,12 +748,12 @@ export default function NutritionScreen() {
                       </Text>
                     </View>
                     <TouchableOpacity
-                      onPress={() => removeMealEntry(entry.id)}
+                      onPress={() => setEditingEntry(entry)}
                       style={styles.removeBtn}
                     >
-                      <Text style={{ color: colors.error, fontSize: 18 }}>×</Text>
+                      <Text style={{ color: colors.text.tertiary, fontSize: 18 }}>›</Text>
                     </TouchableOpacity>
-                  </View>
+                  </TouchableOpacity>
                 ))
               )}
             </View>
@@ -660,6 +776,12 @@ export default function NutritionScreen() {
       )}
 
       <GoalSettingsModal visible={showGoals} onClose={() => setShowGoals(false)} />
+      <EditMealEntryModal
+        entry={editingEntry}
+        onClose={() => setEditingEntry(null)}
+        onSave={updateMealEntry}
+        onDelete={removeMealEntry}
+      />
     </SafeAreaView>
   );
 }
@@ -769,6 +891,31 @@ const goalModal = StyleSheet.create({
   btnGradient: { padding: spacing.md, alignItems: 'center' },
   btnText:     { ...typography.h4, color: '#fff' },
   cancel:      { padding: spacing.md, alignItems: 'center' },
+  cancelText:  { ...typography.bodyMed, color: colors.text.secondary },
+});
+
+const editModal = StyleSheet.create({
+  overlay:     { flex: 1, justifyContent: 'flex-end' },
+  backdrop:    { position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.3)' },
+  sheet:       { backgroundColor: colors.background.primary, borderTopLeftRadius: radius.xxl, borderTopRightRadius: radius.xxl, padding: spacing.lg, paddingBottom: 40 },
+  handle:      { width: 36, height: 4, backgroundColor: colors.border.medium, borderRadius: 2, alignSelf: 'center', marginBottom: spacing.md },
+  title:       { ...typography.h3, color: colors.text.primary },
+  sub:         { ...typography.small, color: colors.text.secondary, marginTop: 2 },
+  detail:      { ...typography.small, color: colors.text.secondary, marginTop: spacing.sm, marginBottom: spacing.md },
+  label:       { ...typography.smallMed, color: colors.text.secondary, marginBottom: spacing.xs, marginTop: spacing.sm },
+  mealChips:   { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, marginBottom: spacing.sm },
+  mealChip:    { paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, backgroundColor: colors.background.secondary, borderRadius: radius.full, borderWidth: 1, borderColor: colors.border.light },
+  mealChipActive: { backgroundColor: colors.glass.brand, borderColor: colors.brand.primary },
+  mealChipText: { ...typography.caption, color: colors.text.secondary },
+  mealChipTextActive: { color: colors.brand.primary, fontWeight: '600' },
+  input:       { backgroundColor: colors.background.secondary, borderRadius: radius.md, padding: spacing.md, ...typography.body, color: colors.text.primary },
+  source:      { ...typography.caption, color: colors.text.tertiary, marginTop: spacing.sm },
+  saveBtn:     { borderRadius: radius.lg, overflow: 'hidden', marginTop: spacing.lg },
+  saveGradient:{ padding: spacing.md, alignItems: 'center' },
+  saveText:    { ...typography.h4, color: '#fff' },
+  deleteBtn:   { padding: spacing.md, alignItems: 'center', marginTop: spacing.xs },
+  deleteText:  { ...typography.bodyMed, color: colors.error },
+  cancelBtn:   { padding: spacing.sm, alignItems: 'center' },
   cancelText:  { ...typography.bodyMed, color: colors.text.secondary },
 });
 

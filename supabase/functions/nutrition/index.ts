@@ -1,14 +1,29 @@
 import { serve } from 'https://deno.land/std@0.208.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.47.0';
 
 const USDA_API_KEY        = Deno.env.get('USDA_API_KEY') ?? '';
 const NUTRITIONIX_APP_ID  = Deno.env.get('NUTRITIONIX_APP_ID') ?? '';
 const NUTRITIONIX_APP_KEY = Deno.env.get('NUTRITIONIX_APP_KEY') ?? '';
 const ANTHROPIC_API_KEY   = Deno.env.get('ANTHROPIC_API_KEY') ?? '';
+const SUPABASE_URL        = Deno.env.get('SUPABASE_URL') ?? '';
+const SUPABASE_ANON_KEY   = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+async function requireUser(req: Request): Promise<boolean> {
+  const authorization = req.headers.get('Authorization') ?? '';
+  if (!authorization || !SUPABASE_URL || !SUPABASE_ANON_KEY) return false;
+
+  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: authorization } },
+    auth: { persistSession: false },
+  });
+  const { data, error } = await client.auth.getUser();
+  return !error && !!data.user;
+}
 
 interface NutritionResult {
   name: string;
@@ -254,8 +269,19 @@ serve(async (req) => {
   }
 
   try {
+    if (!(await requireUser(req))) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const { query, mode = 'search' } = await req.json();
-    if (!query?.trim()) {
+    const normalizedQuery = String(query ?? '').trim().slice(0, 240);
+    const normalizedMode = ['barcode', 'parse', 'ai', 'search'].includes(String(mode))
+      ? String(mode)
+      : 'search';
+    if (!normalizedQuery) {
       return new Response(JSON.stringify({ error: 'query is required' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -264,20 +290,20 @@ serve(async (req) => {
 
     let results: NutritionResult[] = [];
 
-    if (mode === 'barcode') {
-      results = await lookupBarcodeNutritionix(query);
-      if (results.length === 0) results = await lookupBarcodeOpenFoodFacts(query);
-      if (results.length === 0) results = await lookupBarcodeUSDA(query);
-      if (results.length === 0) results = await askClaude(query);
-    } else if (mode === 'parse') {
-      results = await parseNutritionix(query);
-      if (results.length === 0) results = await searchUSDA(query, 5);
-      if (results.length === 0) results = await askClaude(query);
-    } else if (mode === 'ai') {
-      results = await askClaude(query);
+    if (normalizedMode === 'barcode') {
+      results = await lookupBarcodeNutritionix(normalizedQuery);
+      if (results.length === 0) results = await lookupBarcodeOpenFoodFacts(normalizedQuery);
+      if (results.length === 0) results = await lookupBarcodeUSDA(normalizedQuery);
+      if (results.length === 0) results = await askClaude(normalizedQuery);
+    } else if (normalizedMode === 'parse') {
+      results = await parseNutritionix(normalizedQuery);
+      if (results.length === 0) results = await searchUSDA(normalizedQuery, 5);
+      if (results.length === 0) results = await askClaude(normalizedQuery);
+    } else if (normalizedMode === 'ai') {
+      results = await askClaude(normalizedQuery);
     } else {
-      results = await searchUSDA(query, 6);
-      if (results.length === 0) results = await askClaude(query);
+      results = await searchUSDA(normalizedQuery, 6);
+      if (results.length === 0) results = await askClaude(normalizedQuery);
     }
 
     return new Response(JSON.stringify({ results }), {

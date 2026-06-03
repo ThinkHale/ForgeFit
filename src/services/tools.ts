@@ -130,6 +130,11 @@ export const FORGE_TOOLS = [
           },
           description: 'Ordered list of exercises',
         },
+        workout_type: {
+          type: 'string',
+          enum: ['strength', 'cardio', 'hiit', 'flexibility', 'sport'],
+          description: 'Best category for this workout',
+        },
       },
       required: ['workout_name', 'exercises'],
     },
@@ -315,6 +320,7 @@ export async function executeTool(tool: ToolUse): Promise<ToolResult> {
             rest_seconds?: number;
             notes?: string;
           }>;
+          workout_type?: 'strength' | 'cardio' | 'hiit' | 'flexibility' | 'sport';
         };
         store.startWorkout(
           inp.workout_name,
@@ -324,7 +330,8 @@ export async function executeTool(tool: ToolUse): Promise<ToolResult> {
             reps:        e.reps,
             restSeconds: e.rest_seconds ?? 60,
             notes:       e.notes,
-          }))
+          })),
+          inp.workout_type
         );
         // Navigate to the active workout screen
         navigate('WorkoutActive');

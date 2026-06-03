@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { User, UserProfile, ChatMessage, HealthSnapshot, DailyNutrition, MealEntry, ActiveWorkout, ActiveWorkoutExercise } from '../types';
+import { User, UserProfile, ChatMessage, HealthSnapshot, DailyNutrition, MealEntry, ActiveWorkout, ActiveWorkoutExercise, WorkoutSession } from '../types';
 import { supabase } from '../services/supabase';
 import { extractMemoryUpdate } from '../services/coach';
 import { healthService } from '../services/health';
@@ -89,6 +89,17 @@ const ARRAY_FIELDS = new Set([
   'personalDetails','coachNotes',
 ]);
 
+const todayStr = () => new Date().toISOString().split('T')[0];
+
+function inferWorkoutType(name: string, exercises: Array<Pick<ActiveWorkoutExercise, 'name'>>): WorkoutSession['type'] {
+  const text = `${name} ${exercises.map(e => e.name).join(' ')}`.toLowerCase();
+  if (/\b(run|jog|walk|cycle|bike|row|cardio|zone 2|endurance)\b/.test(text)) return 'cardio';
+  if (/\b(hiit|interval|tabata|emom|amrap|circuit)\b/.test(text)) return 'hiit';
+  if (/\b(yoga|stretch|mobility|flexibility|pilates)\b/.test(text)) return 'flexibility';
+  if (/\b(sport|soccer|basketball|tennis|pickleball)\b/.test(text)) return 'sport';
+  return 'strength';
+}
+
 interface AppState {
   // Auth
   user: User | null;
@@ -96,6 +107,7 @@ interface AppState {
   isResettingPassword: boolean;
   setUser: (user: User | null) => void;
   setResettingPassword: (value: boolean) => void;
+  resetSessionState: () => void;
 
   // Profile / memory
   profile: UserProfile | null;
@@ -126,11 +138,12 @@ interface AppState {
   loadNutritionToday: () => Promise<void>;
   loadNutritionForDate: (date: string) => Promise<void>;
   addMealEntry: (entry: MealEntry) => Promise<void>;
+  updateMealEntry: (entryId: string, updates: Partial<Pick<MealEntry, 'foodItem' | 'mealType' | 'servings'>>) => Promise<void>;
   removeMealEntry: (entryId: string) => Promise<void>;
 
   // Active workout
   activeWorkout: ActiveWorkout | null;
-  startWorkout: (name: string, exercises: Omit<ActiveWorkoutExercise, 'setResults'>[]) => void;
+  startWorkout: (name: string, exercises: Omit<ActiveWorkoutExercise, 'setResults'>[], type?: WorkoutSession['type']) => void;
   updateSetResult: (exerciseIdx: number, setIdx: number, result: { reps?: number; weight?: number }) => void;
   finishWorkout: () => Promise<void>;
   cancelWorkout: () => void;
@@ -143,6 +156,19 @@ export const useStore = create<AppState>((set, get) => ({
   isResettingPassword: false,
   setUser: (user) => set(user ? { user } : { user, isAuthLoading: false }),
   setResettingPassword: (value) => set({ isResettingPassword: value }),
+  resetSessionState: () => set({
+    user: null,
+    profile: null,
+    chatMessages: [],
+    chatHistoryLoaded: false,
+    isChatLoading: false,
+    healthToday: null,
+    nutritionToday: null,
+    nutritionDate: todayStr(),
+    activeWorkout: null,
+    isAuthLoading: false,
+    isResettingPassword: false,
+  }),
 
   // ── Profile ───────────────────────────────────────────────────────────────────
   profile: null,
@@ -194,6 +220,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (error) {
       console.warn('[Profile] upsert failed:', error);
       set({ profile }); // rollback optimistic update so DB stays authoritative
+      throw error;
     }
   },
 
@@ -234,10 +261,10 @@ export const useStore = create<AppState>((set, get) => ({
         .from('coach_messages')
         .select('*')
         .eq('user_id', user.id)
-        .order('timestamp', { ascending: true })
+        .order('timestamp', { ascending: false })
         .limit(60);
       if (data && data.length > 0) {
-        const msgs: ChatMessage[] = data.map((r: Record<string, unknown>) => ({
+        const msgs: ChatMessage[] = [...data].reverse().map((r: Record<string, unknown>) => ({
           id:        r.id as string,
           role:      r.role as 'user' | 'assistant',
           content:   r.content as string,
@@ -294,7 +321,7 @@ export const useStore = create<AppState>((set, get) => ({
   // ── Nutrition ─────────────────────────────────────────────────────────────────
   nutritionToday: null,
   isNutritionLoading: false,
-  nutritionDate: new Date().toISOString().split('T')[0],
+  nutritionDate: todayStr(),
 
   setNutritionDate: (date) => {
     set({ nutritionDate: date });
@@ -302,7 +329,7 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   loadNutritionToday: async () => {
-    const today = new Date().toISOString().split('T')[0];
+    const today = todayStr();
     set({ nutritionDate: today });
     await get().loadNutritionForDate(today);
   },
@@ -377,22 +404,52 @@ export const useStore = create<AppState>((set, get) => ({
     await get().loadNutritionForDate(nutritionDate);
   },
 
+  updateMealEntry: async (entryId, updates) => {
+    const { user, nutritionDate } = get();
+    if (!user) return;
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.foodItem) dbUpdates.food_item = updates.foodItem;
+    if (updates.mealType) dbUpdates.meal_type = updates.mealType;
+    if (updates.servings != null) dbUpdates.servings = updates.servings;
+    if (!Object.keys(dbUpdates).length) return;
+
+    const { error } = await supabase
+      .from('meal_entries')
+      .update(dbUpdates)
+      .eq('id', entryId)
+      .eq('user_id', user.id);
+    if (error) {
+      console.warn('[Nutrition] updateMealEntry failed:', error);
+      throw error;
+    }
+    await get().loadNutritionForDate(nutritionDate);
+  },
+
   removeMealEntry: async (entryId) => {
     const { user, nutritionDate } = get();
     if (!user) return;
-    await supabase.from('meal_entries').delete().eq('id', entryId).eq('user_id', user.id);
+    const { error } = await supabase.from('meal_entries').delete().eq('id', entryId).eq('user_id', user.id);
+    if (error) {
+      console.warn('[Nutrition] removeMealEntry failed:', error);
+      throw error;
+    }
     await get().loadNutritionForDate(nutritionDate);
   },
 
   // ── Active Workout ────────────────────────────────────────────────────────────
   activeWorkout: null,
 
-  startWorkout: (name, exercises) => {
+  startWorkout: (name, exercises, type) => {
+    const normalizedExercises = exercises.map(e => ({
+      ...e,
+      sets: Math.max(1, Math.round(e.sets)),
+    }));
     const workout: ActiveWorkout = {
       id:         Date.now().toString(),
       name,
+      type:       type ?? inferWorkoutType(name, normalizedExercises),
       startedAt:  new Date().toISOString(),
-      exercises:  exercises.map(e => ({
+      exercises:  normalizedExercises.map(e => ({
         ...e,
         setResults: Array.from({ length: e.sets }, () => ({ completed: false })),
       })),
@@ -414,18 +471,53 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   finishWorkout: async () => {
-    const { activeWorkout } = get();
-    if (!activeWorkout) return;
+    const { activeWorkout, user } = get();
+    if (!activeWorkout || !user) return;
+    const completedAt = new Date().toISOString();
     const durationMs = Date.now() - new Date(activeWorkout.startedAt).getTime();
-    const durationMin = Math.round(durationMs / 60000);
+    const durationMin = Math.max(1, Math.round(durationMs / 60000));
+    const caloriesBurned = Math.round(durationMin * 8);
+    const workoutType = activeWorkout.type ?? inferWorkoutType(activeWorkout.name, activeWorkout.exercises);
+    const exercises = activeWorkout.exercises.map(ex => ({
+      name: ex.name,
+      sets: ex.setResults.map((set, idx) => ({
+        setNumber: idx + 1,
+        reps: set.reps,
+        weight: set.weight,
+        completed: set.completed,
+      })),
+      targetSets: ex.sets,
+      targetReps: ex.reps,
+      restSeconds: ex.restSeconds,
+      notes: ex.notes,
+    }));
+
+    const { error } = await supabase.from('workout_sessions').insert({
+      user_id: user.id,
+      name: activeWorkout.name,
+      type: workoutType,
+      exercises,
+      started_at: activeWorkout.startedAt,
+      completed_at: completedAt,
+      duration_minutes: durationMin,
+      calories_burned: caloriesBurned,
+      source: 'forge',
+    });
+    if (error) {
+      console.warn('[Workout] finishWorkout persist failed:', error);
+      throw error;
+    }
+
     try {
       await healthService.logWorkout({
-        type:      activeWorkout.name,
+        type:      workoutType,
         startDate: activeWorkout.startedAt,
-        endDate:   new Date().toISOString(),
-        calories:  Math.round(durationMin * 8),
+        endDate:   completedAt,
+        calories:  caloriesBurned,
       });
-    } catch {}
+    } catch (e) {
+      console.warn('[Workout] HealthKit log failed:', e);
+    }
     set({ activeWorkout: null });
   },
 

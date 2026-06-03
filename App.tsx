@@ -11,7 +11,7 @@ import { useStore } from './src/store';
 
 
 export default function App() {
-  const { setUser, loadProfile, loadNutritionToday, setResettingPassword } = useStore();
+  const { setUser, loadProfile, loadNutritionToday, setResettingPassword, resetSessionState } = useStore();
 
   useEffect(() => {
     healthService.autoInitialize();
@@ -80,7 +80,7 @@ export default function App() {
           loadNutritionToday();
         }
       } else {
-        setUser(null);
+        resetSessionState();
       }
     });
 

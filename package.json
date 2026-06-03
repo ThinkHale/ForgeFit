@@ -6,7 +6,7 @@
     "start": "expo start",
     "ios": "expo run:ios",
     "android": "expo run:android",
-    "test": "jest --watchAll",
+    "test": "jest --watchAll=false --passWithNoTests",
     "lint": "eslint src --ext .ts,.tsx",
     "type-check": "tsc --noEmit"
   },
@@ -45,7 +45,6 @@
     "@babel/core": "^7.25.0",
     "@testing-library/react-native": "^12.4.0",
     "@types/react": "~18.3.12",
-    "@types/react-native": "^0.73.0",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "dotenv": "^16.4.0",
     "eslint": "^8.57.0",

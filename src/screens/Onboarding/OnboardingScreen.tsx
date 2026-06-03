@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Dimensions,
+  View, Text, TouchableOpacity, StyleSheet,
   TextInput, ScrollView, StatusBar,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -11,8 +11,6 @@ import { healthService } from '../../services/health';
 import { watchService } from '../../services/watch';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 import { UserProfile } from '../../types';
-
-const { width } = Dimensions.get('window');
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 type PrimaryGoalId = NonNullable<UserProfile['primaryGoal']>;
@@ -80,8 +78,8 @@ function Steps({ total, current }: { total: number; current: number }) {
   );
 }
 
-export default function OnboardingScreen({ navigation }: { navigation: any }) {
-  const { saveProfile, profile } = useStore();
+export default function OnboardingScreen() {
+  const { saveProfile } = useStore();
   const [step, setStep] = useState(0);
   const [name, setName] = useState('');
   const [goal, setGoal] = useState<PrimaryGoalId | null>(null);

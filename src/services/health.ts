@@ -6,7 +6,7 @@ import AppleHealthKit, {
   HealthUnit,
 } from 'react-native-health';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { HealthSnapshot } from '../types';
+import { HealthSnapshot, WorkoutSession } from '../types';
 
 const HEALTH_AUTHORIZED_KEY = '@healthkit_authorized';
 
@@ -38,6 +38,15 @@ const PERMISSIONS: HealthKitPermissions = {
     ],
   },
 };
+
+function mapWorkoutType(type: WorkoutSession['type'] | string): string {
+  const normalized = type.toLowerCase();
+  if (normalized === 'cardio' || normalized.includes('run')) return AppleHealthKit.Constants.Activities.Running;
+  if (normalized === 'hiit' || normalized.includes('interval')) return AppleHealthKit.Constants.Activities.HighIntensityIntervalTraining;
+  if (normalized === 'flexibility' || normalized.includes('yoga') || normalized.includes('stretch')) return AppleHealthKit.Constants.Activities.Flexibility;
+  if (normalized === 'sport') return AppleHealthKit.Constants.Activities.CrossTraining;
+  return AppleHealthKit.Constants.Activities.TraditionalStrengthTraining;
+}
 
 class HealthService {
   private initialized = false;
@@ -198,17 +207,19 @@ class HealthService {
   }
 
   async logWorkout(params: {
-    type: string;
+    type: WorkoutSession['type'] | string;
     startDate: string;
     endDate: string;
     calories: number;
   }): Promise<void> {
     return new Promise((resolve, reject) => {
       const opts: HealthActivityOptions = {
-        type: AppleHealthKit.Constants.Activities.TraditionalStrengthTraining,
+        type: mapWorkoutType(params.type),
         startDate: params.startDate,
         endDate: params.endDate,
-      };
+        energyBurned: params.calories,
+        energyBurnedUnit: 'calorie',
+      } as HealthActivityOptions & { energyBurned: number; energyBurnedUnit: string };
       AppleHealthKit.saveWorkout(opts, (err) => {
         if (err) reject(err); else resolve();
       });

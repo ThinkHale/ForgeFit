@@ -1,15 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import {
-  View, Text, ScrollView, StyleSheet, Dimensions,
+  View, Text, ScrollView, StyleSheet,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
 import { healthService } from '../../services/health';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
-
-const { width } = Dimensions.get('window');
-const BAR_WIDTH = (width - spacing.md * 2 - spacing.lg * 2 - spacing.sm * 6) / 7;
 
 const DAYS_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 

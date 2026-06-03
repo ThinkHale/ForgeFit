@@ -93,10 +93,11 @@ function MessageBubble({ message }: { message: ChatMessage }) {
 }
 
 export default function CoachScreen({ route }: { route?: any }) {
-  const { profile, chatMessages, isChatLoading, chatHistoryLoaded, addChatMessage, setChatLoading, clearChat, loadChatHistory, runMemoryExtraction, healthToday, nutritionToday } = useStore();
+  const { profile, chatMessages, isChatLoading, chatHistoryLoaded, addChatMessage, setChatLoading, loadChatHistory, runMemoryExtraction, healthToday, nutritionToday } = useStore();
   const [input, setInput] = useState('');
   const scrollRef = useRef<ScrollView>(null);
   const hasGreetedRef = useRef(false);
+  const handledInitialRef = useRef<string | null>(null);
 
   // Load persisted history once on mount
   useEffect(() => {
@@ -104,11 +105,6 @@ export default function CoachScreen({ route }: { route?: any }) {
       loadChatHistory();
     }
   }, []);
-
-  useEffect(() => {
-    const msg = route?.params?.initialMessage;
-    if (msg) setInput(msg);
-  }, [route?.params?.initialMessage]);
 
   // Show greeting only after history is loaded and no messages exist
   useEffect(() => {
@@ -230,6 +226,22 @@ export default function CoachScreen({ route }: { route?: any }) {
       setChatLoading(false);
     }
   }, [input, isChatLoading, profile, healthToday, nutritionToday]);
+
+  useEffect(() => {
+    const msg = route?.params?.initialMessage;
+    if (!msg) return;
+    const key = `${route?.params?.initialMessageId ?? ''}:${msg}`;
+    if (handledInitialRef.current === key) return;
+
+    if (route?.params?.autoSend) {
+      if (!profile || !chatHistoryLoaded || isChatLoading) return;
+      handledInitialRef.current = key;
+      send(msg);
+    } else {
+      handledInitialRef.current = key;
+      setInput(msg);
+    }
+  }, [route?.params?.initialMessage, route?.params?.initialMessageId, route?.params?.autoSend, profile, chatHistoryLoaded, isChatLoading, send]);
 
   const bondPct = Math.min(100, ((profile?.sessionCount ?? 0) / 10) * 100);
 

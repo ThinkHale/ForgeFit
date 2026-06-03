@@ -110,7 +110,11 @@ export default function WorkoutsScreen({ navigation }: { navigation: any }) {
 
   function goToCoach(prompt: string) {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate('Coach', { initialMessage: prompt });
+    navigation.navigate('Coach', {
+      initialMessage: prompt,
+      initialMessageId: Date.now().toString(),
+      autoSend: true,
+    });
   }
 
   return (

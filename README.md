@@ -38,7 +38,7 @@ An AI-powered iOS fitness app that acts as a personal trainer, nutrition coach, 
 ```
 forge-app/
 ├── App.tsx                          # Entry point, auth listener
-├── app.json                         # Expo config + HealthKit entitlements
+├── app.config.js                    # Expo config + native permissions
 ├── src/
 │   ├── theme/index.ts               # Design system (colors, typography, spacing)
 │   ├── types/index.ts               # All TypeScript types
@@ -86,23 +86,22 @@ npm install
 3. Enable Apple OAuth in Supabase Auth > Providers > Apple
 4. Copy your project URL and anon key
 
-### 3. Anthropic API key
+### 3. Edge function secrets
 
-Get your key at [console.anthropic.com](https://console.anthropic.com)
+Set server-side secrets for the Supabase Edge Functions. Do not put Anthropic, USDA, or Nutritionix secrets in Expo client config.
 
 ### 4. Environment config
 
-Update `app.json` extra fields:
+Set client-safe Expo config values via `.env` / EAS environment variables:
 
 ```json
 "extra": {
   "supabaseUrl": "https://YOUR_PROJECT.supabase.co",
-  "supabaseAnonKey": "YOUR_ANON_KEY",
-  "anthropicApiKey": "sk-ant-..."
+  "supabaseAnonKey": "YOUR_ANON_KEY"
 }
 ```
 
-For production, use [Expo EAS Secrets](https://docs.expo.dev/build-reference/variables/) instead.
+For production, use [Expo EAS environment variables](https://docs.expo.dev/build-reference/variables/) for client-safe values and Supabase secrets for edge-function API keys.
 
 ### 5. Run
 

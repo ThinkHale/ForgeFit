@@ -32,6 +32,8 @@ module.exports = {
           'Forge writes workout and nutrition data to Apple Health.',
         NSMotionUsageDescription:
           'Forge uses motion data to detect your activity level.',
+        NSCameraUsageDescription:
+          'Forge uses your camera to scan food barcodes for quick nutrition logging.',
       },
       entitlements: {
         'com.apple.developer.healthkit': true,
@@ -42,6 +44,7 @@ module.exports = {
       'expo-font',
       'expo-secure-store',
       'expo-apple-authentication',
+      'expo-camera',
       [
         'expo-notifications',
         {
@@ -54,7 +57,6 @@ module.exports = {
     extra: {
       supabaseUrl: process.env.SUPABASE_URL || '',
       supabaseAnonKey: process.env.SUPABASE_ANON_KEY || '',
-      anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
     },
   },
 };
