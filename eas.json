@@ -8,17 +8,27 @@
       "distribution": "internal",
       "ios": {
         "buildConfiguration": "Debug"
+      },
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
       }
     },
     "preview": {
       "distribution": "internal",
       "ios": {
         "buildConfiguration": "Release"
+      },
+      "android": {
+        "buildType": "apk"
       }
     },
     "production": {
       "ios": {
         "buildConfiguration": "Release"
+      },
+      "android": {
+        "buildType": "app-bundle"
       }
     }
   },
@@ -28,6 +38,10 @@
         "appleId": "thinkhale@icloud.com",
         "ascAppId": "6771578330",
         "appleTeamId": "MZ3635323W"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal"
       }
     }
   }

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  Dimensions, StatusBar, RefreshControl, Modal,
+  Dimensions, StatusBar, RefreshControl, Modal, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,6 +12,9 @@ import { supabase } from '../../services/supabase';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 
 const { width } = Dimensions.get('window');
+
+// Apple Health on iOS, Health Connect on Android.
+const HEALTH_PROVIDER = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
 
 // ─── Simple bar chart ─────────────────────────────────────────────────────────
 function BarChart({ data, color }: { data: Array<{ label: string; value: number }>; color: string }) {
@@ -161,11 +164,13 @@ function ActivityDetailModal({ type, healthToday, onClose }: {
                 </View>
               </View>
               <Text style={detail.hrNote}>
-                Heart rate data synced from Apple Health. Latest reading from the past 24 hours.
+                Heart rate data synced from {HEALTH_PROVIDER}. Latest reading from the past 24 hours.
               </Text>
               {(!healthToday?.heartRateAvg && !healthToday?.heartRateResting) && (
                 <Text style={detail.hrNote}>
-                  No heart rate data today. Make sure your Apple Watch is worn and Health permissions are granted.
+                  {Platform.OS === 'ios'
+                    ? 'No heart rate data today. Make sure your Apple Watch is worn and Health permissions are granted.'
+                    : `No heart rate data today. Make sure your wearable is syncing and ${HEALTH_PROVIDER} permissions are granted.`}
                 </Text>
               )}
             </View>
@@ -182,7 +187,7 @@ function ActivityDetailModal({ type, healthToday, onClose }: {
                 </ScrollView>
               ) : (
                 <View style={detail.chartPlaceholder}>
-                  <Text style={{ color: colors.text.tertiary }}>No data yet. Connect Apple Health to sync.</Text>
+                  <Text style={{ color: colors.text.tertiary }}>No data yet. Connect {HEALTH_PROVIDER} to sync.</Text>
                 </View>
               )}
 
@@ -378,7 +383,7 @@ export default function HomeScreen({ navigation }: { navigation: any }) {
             >
               <Text style={styles.healthNudgeIcon}>❤️</Text>
               <View style={{ flex: 1 }}>
-                <Text style={styles.healthNudgeTitle}>Connect Apple Health</Text>
+                <Text style={styles.healthNudgeTitle}>Connect {HEALTH_PROVIDER}</Text>
                 <Text style={styles.healthNudgeSub}>Tap to sync steps, heart rate & activity</Text>
               </View>
               <Text style={{ color: colors.brand.primary, fontSize: 18 }}>›</Text>

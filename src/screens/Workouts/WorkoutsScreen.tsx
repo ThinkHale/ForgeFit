@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Alert, Modal,
+  TextInput, Alert, Modal, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -9,6 +9,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useStore } from '../../store';
 import { healthService } from '../../services/health';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
+
+// Apple Health on iOS, Health Connect on Android.
+const HEALTH_PROVIDER = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
 
 const WORKOUT_TYPES = [
   { id: 'strength',    icon: '🏋️', label: 'Strength',    prompt: 'Build me a strength training workout for today based on my goal and fitness level.' },
@@ -44,11 +47,11 @@ function LogWorkoutModal({ visible, onClose }: { visible: boolean; onClose: () =
         calories: Math.round(mins * 8),
       });
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Logged!', `${name} saved to Apple Health.`);
+      Alert.alert('Logged!', `${name} saved to ${HEALTH_PROVIDER}.`);
       setName(''); setDuration('');
       onClose();
     } catch {
-      Alert.alert('Error', 'Could not log workout. Make sure Apple Health is connected.');
+      Alert.alert('Error', `Could not log workout. Make sure ${HEALTH_PROVIDER} is connected.`);
     } finally {
       setLogging(false);
     }
@@ -205,7 +208,7 @@ export default function WorkoutsScreen({ navigation }: { navigation: any }) {
           </View>
           <View style={{ flex: 1 }}>
             <Text style={s.logTitle}>Log a Workout</Text>
-            <Text style={s.logSub}>Save to Apple Health to track your history.</Text>
+            <Text style={s.logSub}>Save to {HEALTH_PROVIDER} to track your history.</Text>
           </View>
           <Text style={{ color: colors.brand.primary, fontSize: 20 }}>+</Text>
         </TouchableOpacity>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet,
-  TextInput, ScrollView, StatusBar,
+  TextInput, ScrollView, StatusBar, Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Haptics from 'expo-haptics';
@@ -11,6 +11,9 @@ import { healthService } from '../../services/health';
 import { watchService } from '../../services/watch';
 import { colors, spacing, radius, typography, shadows } from '../../theme';
 import { UserProfile } from '../../types';
+
+// Platform-specific health provider name (Apple Health on iOS, Health Connect on Android).
+const HEALTH_PROVIDER = Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 type PrimaryGoalId = NonNullable<UserProfile['primaryGoal']>;
@@ -214,12 +217,12 @@ export default function OnboardingScreen() {
                 ))}
               </View>
 
-              {/* Apple Health connect */}
+              {/* Health provider connect */}
               <View style={[styles.healthCard, shadows.sm]}>
                 <View style={styles.healthHeader}>
                   <Text style={{ fontSize: 28 }}>❤️</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.healthTitle}>Connect Apple Health</Text>
+                    <Text style={styles.healthTitle}>Connect {HEALTH_PROVIDER}</Text>
                     <Text style={styles.healthSub}>Sync steps, heart rate, sleep, and workouts. Forge gets smarter with your real data.</Text>
                   </View>
                 </View>
@@ -230,7 +233,7 @@ export default function OnboardingScreen() {
                       start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
                       style={styles.healthBtnGradient}
                     >
-                      <Text style={styles.healthBtnText}>Connect Apple Health</Text>
+                      <Text style={styles.healthBtnText}>Connect {HEALTH_PROVIDER}</Text>
                     </LinearGradient>
                   </TouchableOpacity>
                 ) : healthPermission ? (

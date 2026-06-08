@@ -13,7 +13,8 @@
       "Bash(sips -s format png --removeAlpha /Users/Cody.Hale/ThinkHale/ForgeFit/assets/icon.png --out /Users/Cody.Hale/ThinkHale/ForgeFit/assets/icon.png)",
       "Bash(sips -s format png --removeAlpha \"/Users/Cody.Hale/ThinkHale/ForgeFit/ios/Forge/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png\" --out \"/Users/Cody.Hale/ThinkHale/ForgeFit/ios/Forge/Images.xcassets/AppIcon.appiconset/App-Icon-1024x1024@1x.png\")",
       "Bash(sips --help)",
-      "Bash(python3 -)"
+      "Bash(python3 -)",
+      "Bash(grep -rA3 \"ActiveCaloriesBurned\\\\|'Steps'\" lib/typescript/types/aggregate.types.d.ts)"
     ]
   }
 }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  TextInput, Switch, Alert,
+  TextInput, Switch, Alert, Platform,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -212,7 +212,7 @@ export default function SettingsScreen({ navigation }: { navigation: any }) {
 
         {/* ── Health ── */}
         <Section title="HEALTH & FITNESS">
-          <Row label="Apple Health" first last>
+          <Row label={Platform.OS === 'ios' ? 'Apple Health' : 'Health Connect'} first last>
             <TouchableOpacity
               onPress={healthConnected ? undefined : handleConnectHealth}
               style={[s.healthBtn, healthConnected && s.healthBtnConnected]}
