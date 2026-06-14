@@ -42,30 +42,16 @@ module.exports = {
     },
     android: {
       package: process.env.ANDROID_PACKAGE || 'com.thinkhale.forgefit',
-      versionCode: Number(process.env.ANDROID_VERSION_CODE || 1),
+      versionCode: Number(process.env.ANDROID_VERSION_CODE || 2),
       adaptiveIcon: {
         foregroundImage: './assets/icon.png',
         backgroundColor: '#14141E',
       },
-      // The react-native-health-connect plugin only adds the permissions-rationale
-      // intent-filter — the actual Health Connect permissions must be declared here.
-      // These mirror the read/write record types requested in health.android.ts.
-      // CAMERA is for barcode scanning.
-      permissions: [
-        'CAMERA',
-        'android.permission.health.READ_STEPS',
-        'android.permission.health.WRITE_STEPS',
-        'android.permission.health.READ_ACTIVE_CALORIES_BURNED',
-        'android.permission.health.WRITE_ACTIVE_CALORIES_BURNED',
-        'android.permission.health.READ_HEART_RATE',
-        'android.permission.health.READ_RESTING_HEART_RATE',
-        'android.permission.health.READ_WEIGHT',
-        'android.permission.health.WRITE_WEIGHT',
-        'android.permission.health.READ_DISTANCE',
-        'android.permission.health.READ_EXERCISE',
-        'android.permission.health.WRITE_EXERCISE',
-        'android.permission.health.READ_SLEEP',
-      ],
+      // CAMERA is for barcode scanning. Health Connect permissions, <queries>,
+      // and the rationale activity-alias are added by the local
+      // withHealthConnectPermissions plugin (Expo's android.permissions does not
+      // reliably emit android.permission.health.* entries).
+      permissions: ['CAMERA'],
     },
     plugins: [
       'expo-font',
@@ -73,6 +59,9 @@ module.exports = {
       'expo-apple-authentication',
       'expo-camera',
       'react-native-health-connect',
+      // Adds Health Connect <uses-permission>, <queries> visibility, and the
+      // Android 14+ rationale activity-alias that the HC plugin omits.
+      './plugins/withHealthConnectPermissions',
       [
         'expo-build-properties',
         {
